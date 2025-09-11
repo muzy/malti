@@ -463,6 +463,7 @@ docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 # Verify update
 curl https://yourdomain.com/health
+```
 
 ### 🛡️ Self-Hosting Security
 
