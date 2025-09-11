@@ -1,0 +1,69 @@
+name: malti
+services:
+  # Caddy reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-yourdomain.com}
+    command: caddy reverse-proxy --from https://${DOMAIN:-yourdomain.com} --to malti:8000
+    restart: unless-stopped
+    depends_on:
+      - malti
+    networks:
+      - malti-network
+
+  # TimescaleDB database
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    container_name: timescaledb
+    environment:
+      POSTGRES_DB: malti
+      POSTGRES_USER: ${DB_USER:-malti_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-malti_password}
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-malti_user} -d malti"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - malti-network
+
+  # Malti backend API
+  malti:
+    image: muzy/malti:latest
+    container_name: backend
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-malti_user}:${DB_PASSWORD:-malti_password}@timescaledb:5432/malti
+      MALTI_CONFIG_PATH: /app/config/malti.production.toml
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./config:/app/config
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - malti-network
+    # Remove port exposure since Caddy will handle external access
+    # ports:
+    #   - "8000:8000"
+
+volumes:
+  timescaledb_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  malti-network:
+    driver: bridge

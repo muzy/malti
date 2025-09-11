@@ -1,0 +1,37 @@
+# Malti Configuration File
+
+[services]
+# Define services that can send telemetry data
+
+[services.auth-service]
+api_key = "auth-service-key"
+description = "Authentication service"
+
+[services.payment-service]
+api_key = "payment-service-key"
+description = "Payment processing service"
+
+[services.user-service]
+api_key = "user-service-key"
+description = "User management service"
+
+[services.test-service]
+api_key = "test-service-key"
+description = "Test service"
+
+[users]
+# Define users who can query metrics and login to dashboard
+
+[users.user1]
+username = "user1"
+api_key = "user-api-key"
+
+[users.user2]
+username = "user2"
+api_key = "user2-api-key"
+
+[api]
+# API configuration (for test)
+base_url = "http://localhost:8000"
+ingest_endpoint = "/api/v1/ingest"
+metrics_endpoint = "/api/v1/metrics"

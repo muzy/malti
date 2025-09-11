@@ -1,0 +1,9 @@
+fastapi[standard]
+uvicorn[standard]
+asyncpg
+sqlalchemy[asyncio]
+toml
+httpx
+requests
+slowapi
+pydantic-settings
