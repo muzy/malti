@@ -12,7 +12,7 @@ import {
   alpha,
 } from '@mui/material';
 import { AutoGraph } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 const LoginPage = () => {
   const [apiKey, setApiKey] = useState('');

@@ -39,6 +39,7 @@ Malti is a comprehensive **self-hosted** telemetry collection and visualization 
   - Error rate monitoring
 - **Responsive Design**: Optimized for desktop, tablet, and mobile devices
 - **Time Range Selection**: Quick access to 1h, 6h, 24h, 7d, 30d, 3m, 6m, 1y data
+- **Configurable Thresholds**: Color-coded metrics based on customizable performance thresholds
 
 ### Data Management
 - **Automatic Aggregation**: Continuous aggregates for 5-minute and 1-hour intervals
@@ -192,6 +193,17 @@ metrics_endpoint = "/api/v1/metrics"
 [aggregation]
 batch_size = 1000
 batch_interval_seconds = 60
+
+[dashboard.thresholds]
+# Error rate thresholds (in percentage) - used for coloring error rate displays
+error_rate_success_threshold = 0.5     # Error rate <= 0.5% displays as green (success)
+error_rate_warning_threshold = 1.0     # Error rate > 0.5% and <= 1.0% displays as yellow/orange (warning)
+                                       # Error rate > 1.0% displays as red (error)
+
+# Latency thresholds (in milliseconds) - used for coloring latency displays
+latency_success_threshold = 300        # Latency <= 300ms displays as green (success)
+latency_warning_threshold = 800       # Latency > 300ms and <= 800ms displays as yellow/orange (warning)
+                                       # Latency > 800ms displays as red (error)
 ```
 
 ### Environment Variables
@@ -321,6 +333,24 @@ For Starlette-based frameworks (like FastAPI), check out our [Python/Starlette i
 - **Latency Chart**: Response time trends with min/max/average lines
 - **Endpoints Chart**: Top endpoints by request count with error indicators
 - **Consumer Chart**: Request distribution by consumer type
+
+### Dashboard Thresholds
+
+The dashboard uses configurable thresholds to provide visual indicators for system health and performance metrics. These thresholds are defined in your `malti.toml` configuration file and determine the color-coding of metrics throughout the dashboard.
+
+#### Error Rate Thresholds
+Error rates are displayed with color-coded indicators:
+- **🟢 Green (Success)**: Error rate ≤ 0.5%
+- **🟡 Yellow/Orange (Warning)**: Error rate > 0.5% and ≤ 1.0%
+- **🔴 Red (Error)**: Error rate > 1.0%
+
+#### Latency Thresholds
+Response times are color-coded based on performance:
+- **🟢 Green (Success)**: Average latency ≤ 300ms
+- **🟡 Yellow/Orange (Warning)**: Average latency > 300ms and ≤ 800ms
+- **🔴 Red (Error)**: Average latency > 800ms
+
+These thresholds apply to all dashboard visualizations including metrics cards, charts, and status indicators.
 
 ## 🗄️ Database Schema
 

@@ -42,7 +42,7 @@ class TestAuthTestEndpoint:
                     data = response.json()
                     
                     # Validate response structure
-                    expected_keys = ["authenticated", "user", "timestamp", "rate_limit_info"]
+                    expected_keys = ["authenticated", "user", "thresholds", "timestamp", "rate_limit_info"]
                     if all(key in data for key in expected_keys):
                         if (data["authenticated"] == True and 
                             data["user"]["name"] == username and
@@ -206,6 +206,7 @@ class TestAuthTestEndpoint:
                 required_fields = {
                     "authenticated": bool,
                     "user": dict,
+                    "thresholds": dict,
                     "timestamp": str,
                     "rate_limit_info": dict
                 }
@@ -220,6 +221,13 @@ class TestAuthTestEndpoint:
                     "endpoint": str,
                     "limit": str,
                     "description": str
+                }
+
+                thresholds_required_fields = {
+                    "error_success_threshold": (int, float),
+                    "error_warning_threshold": (int, float),
+                    "latency_success_threshold": (int, float),
+                    "latency_warning_threshold": (int, float)
                 }
                 
                 all_valid = True
@@ -253,7 +261,18 @@ class TestAuthTestEndpoint:
                         elif not isinstance(data["rate_limit_info"][field], expected_type):
                             all_valid = False
                             error_messages.append(f"Rate limit info field '{field}' should be {expected_type.__name__}, got {type(data['rate_limit_info'][field]).__name__}")
-                
+
+                # Check thresholds fields
+                if "thresholds" in data:
+                    for field, expected_types in thresholds_required_fields.items():
+                        if field not in data["thresholds"]:
+                            all_valid = False
+                            error_messages.append(f"Missing thresholds field: {field}")
+                        elif not isinstance(data["thresholds"][field], expected_types):
+                            all_valid = False
+                            type_names = [t.__name__ for t in expected_types]
+                            error_messages.append(f"Thresholds field '{field}' should be one of {type_names}, got {type(data['thresholds'][field]).__name__}")
+
                 if all_valid:
                     self.log_test("Auth test response structure", True, "All required fields present with correct types")
                 else:

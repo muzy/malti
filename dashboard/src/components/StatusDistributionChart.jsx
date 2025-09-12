@@ -1,32 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Typography,
   Box,
-  Grid,
-  Card,
-  CardContent,
+  List,
+  ListItem,
+  Chip,
+  LinearProgress,
+  Collapse,
+  IconButton,
   alpha,
   useTheme,
 } from '@mui/material';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from 'recharts';
+import { ExpandMore, ExpandLess } from '@mui/icons-material';
+import { getErrorRateColor } from '../utils/statusUtils';
 
 const StatusDistributionChart = ({ data }) => {
   const theme = useTheme();
+  const [expandedServices, setExpandedServices] = useState(new Set());
 
-  const prepareStatusData = () => {
-    if (!data || data.length === 0) return { groupedData: [] };
+  const prepareServiceData = () => {
+    if (!data || data.length === 0) return [];
 
     // Group by service, then by status within each service
     const serviceMap = new Map();
@@ -61,177 +55,396 @@ const StatusDistributionChart = ({ data }) => {
       503: theme.palette.error.main,
     };
 
-    // Prepare grouped data for visualization
-    const groupedData = Array.from(serviceMap.entries())
-      .map(([service, statusMap]) => ({
-        service,
-        statuses: Array.from(statusMap.entries())
+    // Prepare service data for visualization
+    return Array.from(serviceMap.entries())
+      .map(([service, statusMap]) => {
+        const statuses = Array.from(statusMap.entries())
           .map(([status, count]) => ({
             status,
             count,
             color: statusColors[status] || theme.palette.grey.main,
           }))
-          .sort((a, b) => a.status - b.status), // Sort by status code
-        totalRequests: Array.from(statusMap.values()).reduce((sum, count) => sum + count, 0),
-      }))
+          .sort((a, b) => a.status - b.status);
+
+        const totalRequests = Array.from(statusMap.values()).reduce((sum, count) => sum + count, 0);
+
+        // Group by status ranges
+        const success = statuses
+          .filter(s => s.status >= 200 && s.status < 300)
+          .reduce((sum, s) => sum + s.count, 0);
+
+        const warning = statuses
+          .filter(s => s.status >= 300 && s.status < 400)
+          .reduce((sum, s) => sum + s.count, 0);
+
+        const error = statuses
+          .filter(s => s.status >= 400)
+          .reduce((sum, s) => sum + s.count, 0);
+
+        return {
+          service,
+          totalRequests,
+          success,
+          warning,
+          error,
+          statuses,
+        };
+      })
       .sort((a, b) => b.totalRequests - a.totalRequests); // Sort services by total requests
-
-    return { groupedData };
   };
 
-  const { groupedData } = prepareStatusData();
+  const serviceData = prepareServiceData();
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      const category = data.category;
-      const count = data.count;
-      const breakdown = data.breakdown || [];
-
-
-      return (
-        <Paper sx={{ p: 2, border: '1px solid', borderColor: 'divider', minWidth: 200 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            {data.service}
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            {category.charAt(0).toUpperCase() + category.slice(1)}: {count?.toLocaleString() || 0} requests
-          </Typography>
-          {breakdown && breakdown.length > 0 ? (
-            <>
-              <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
-                Status Breakdown:
-              </Typography>
-              {breakdown.map(statusData => (
-                <Typography key={statusData.status} variant="body2" sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                  HTTP {statusData.status}: {statusData.count.toLocaleString()}
-                </Typography>
-              ))}
-            </>
-          ) : (
-            <Typography variant="body2" sx={{ fontSize: '0.875rem', color: 'text.secondary', fontStyle: 'italic' }}>
-              No detailed status codes available
-            </Typography>
-          )}
-        </Paper>
-      );
-    }
-    return null;
+  const toggleServiceExpansion = (service, category) => {
+    const key = `${service}-${category}`;
+    setExpandedServices(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
   };
 
-  // Transform data for individual bars - one entry per service-status combination
-  const chartData = [];
-  groupedData.forEach(serviceData => {
-    const successCount = serviceData.statuses
-      .filter(statusData => statusData.status >= 200 && statusData.status < 300)
-      .reduce((sum, statusData) => sum + statusData.count, 0);
+  const isServiceExpanded = (service, category) => {
+    return expandedServices.has(`${service}-${category}`);
+  };
 
-    const warningCount = serviceData.statuses
-      .filter(statusData => statusData.status >= 300 && statusData.status < 400)
-      .reduce((sum, statusData) => sum + statusData.count, 0);
-
-    const errorCount = serviceData.statuses
-      .filter(statusData => statusData.status >= 400)
-      .reduce((sum, statusData) => sum + statusData.count, 0);
-
-    // Create separate entries for each status category with unique service-category key
-    if (successCount > 0) {
-      chartData.push({
-        serviceCategory: `${serviceData.service}-success`,
-        service: serviceData.service,
-        category: 'success',
-        count: successCount,
-        breakdown: serviceData.statuses.filter(statusData => statusData.status >= 200 && statusData.status < 300),
-        color: theme.palette.success.main,
-      });
-    }
-    if (warningCount > 0) {
-      chartData.push({
-        serviceCategory: `${serviceData.service}-warning`,
-        service: serviceData.service,
-        category: 'warning',
-        count: warningCount,
-        breakdown: serviceData.statuses.filter(statusData => statusData.status >= 300 && statusData.status < 400),
-        color: theme.palette.warning.main,
-      });
-    }
-    if (errorCount > 0) {
-      chartData.push({
-        serviceCategory: `${serviceData.service}-error`,
-        service: serviceData.service,
-        category: 'error',
-        count: errorCount,
-        breakdown: serviceData.statuses.filter(statusData => statusData.status >= 400),
-        color: theme.palette.error.main,
-      });
-    }
-  });
 
 
   return (
-    <Paper sx={{ p: 3, borderRadius: 2, width: '100%' }}>
+    <Paper
+      sx={{
+        p: 3,
+        borderRadius: 2,
+        width: '100%',
+        maxWidth: 'none',
+        minWidth: 0,
+        background: (theme) => theme.palette.background.paper,
+      }}
+    >
       <Typography variant="h6" gutterBottom fontWeight={600}>
         Status Distribution by Service
       </Typography>
 
-      {groupedData.length === 0 ? (
+      {serviceData.length === 0 ? (
         <Box sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          py: 4,
+          height: 200,
           color: 'text.secondary'
         }}>
           <Typography variant="body1">No data available</Typography>
         </Box>
       ) : (
-        <Box sx={{ minHeight: 200 }}>
-          <ResponsiveContainer width="100%" height={Math.max(500, chartData.length * 30 + 150)}>
-            <BarChart
-              data={chartData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-              barCategoryGap="10%"
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke={alpha(theme.palette.divider, 0.5)}
-              />
-              <XAxis
-                dataKey="serviceCategory"
-                tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
-                axisLine={{ stroke: theme.palette.divider }}
-                angle={-45}
-                textAnchor="end"
-                height={80}
-                tickFormatter={(value) => {
-                  // Extract just the service name from "service-category"
-                  const parts = value.split('-');
-                  const service = parts.slice(0, -1).join('-'); // Handle service names with hyphens
-                  const category = parts[parts.length - 1];
-                  return `${service} (${category.charAt(0).toUpperCase()})`;
+        <Box sx={{ mt: 2 }}>
+          <List sx={{ p: 0 }}>
+            {serviceData.map((item, index) => (
+              <ListItem
+                key={index}
+                sx={{
+                  borderRadius: 2,
+                  mb: 1,
+                  p: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                    borderColor: theme.palette.primary.main,
+                  },
+                  transition: 'all 0.2s ease-in-out',
                 }}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
-                axisLine={{ stroke: theme.palette.divider }}
-                label={{
-                  value: 'Request Count',
-                  angle: -90,
-                  position: 'insideLeft',
-                  style: { textAnchor: 'middle', fill: theme.palette.text.secondary }
-                }}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar
-                dataKey="count"
-                radius={[2, 2, 0, 0]}
               >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                <Box sx={{ width: '100%' }}>
+                  {/* Header with service name and stats */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontWeight: 600,
+                        maxWidth: { xs: 200, md: 400 },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.service}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Typography
+                        variant="body2"
+                        color={getErrorRateColor((item.error / item.totalRequests) * 100)}
+                        fontWeight={600}
+                      >
+                        {((item.error / item.totalRequests) * 100).toFixed(1)}% errors
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        in
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {item.totalRequests.toLocaleString()} requests
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Status progress bars */}
+                  <Box sx={{ mb: 1 }}>
+                    {/* Success bar (2xx) */}
+                    {item.success > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mb: 0.5,
+                            cursor: 'pointer',
+                            '&:hover': {
+                              '& .status-label': { opacity: 0.8 },
+                            },
+                          }}
+                          onClick={() => toggleServiceExpansion(item.service, 'success')}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="caption"
+                              color="success.main"
+                              fontWeight={500}
+                              className="status-label"
+                            >
+                              Success (2xx)
+                            </Typography>
+                            <IconButton size="small" sx={{ p: 0 }}>
+                              {isServiceExpanded(item.service, 'success') ? (
+                                <ExpandLess sx={{ fontSize: 16, color: 'success.main' }} />
+                              ) : (
+                                <ExpandMore sx={{ fontSize: 16, color: 'success.main' }} />
+                              )}
+                            </IconButton>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.success.toLocaleString()}
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={(item.success / item.totalRequests) * 100}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.success.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              backgroundColor: theme.palette.success.main,
+                            },
+                            cursor: 'pointer',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          }}
+                          onClick={() => toggleServiceExpansion(item.service, 'success')}
+                        />
+                        <Collapse in={isServiceExpanded(item.service, 'success')}>
+                          <Box sx={{ mt: 1, ml: 2 }}>
+                            {item.statuses
+                              .filter(s => s.status >= 200 && s.status < 300)
+                              .sort((a, b) => a.status - b.status)
+                              .map(status => (
+                                <Box
+                                  key={status.status}
+                                  sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    mb: 0.5,
+                                    pl: 1,
+                                    borderLeft: `2px solid ${theme.palette.success.main}`,
+                                  }}
+                                >
+                                  <Typography variant="caption" color="text.secondary">
+                                    HTTP {status.status}
+                                  </Typography>
+                                  <Typography variant="caption" color="success.main" fontWeight={500}>
+                                    {status.count.toLocaleString()}
+                                  </Typography>
+                                </Box>
+                              ))}
+                          </Box>
+                        </Collapse>
+                      </Box>
+                    )}
+
+                    {/* Warning bar (3xx) */}
+                    {item.warning > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mb: 0.5,
+                            cursor: 'pointer',
+                            '&:hover': {
+                              '& .status-label': { opacity: 0.8 },
+                            },
+                          }}
+                          onClick={() => toggleServiceExpansion(item.service, 'warning')}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="caption"
+                              color="warning.main"
+                              fontWeight={500}
+                              className="status-label"
+                            >
+                              Warning (3xx)
+                            </Typography>
+                            <IconButton size="small" sx={{ p: 0 }}>
+                              {isServiceExpanded(item.service, 'warning') ? (
+                                <ExpandLess sx={{ fontSize: 16, color: 'warning.main' }} />
+                              ) : (
+                                <ExpandMore sx={{ fontSize: 16, color: 'warning.main' }} />
+                              )}
+                            </IconButton>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.warning.toLocaleString()}
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={(item.warning / item.totalRequests) * 100}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.warning.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              backgroundColor: theme.palette.warning.main,
+                            },
+                            cursor: 'pointer',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          }}
+                          onClick={() => toggleServiceExpansion(item.service, 'warning')}
+                        />
+                        <Collapse in={isServiceExpanded(item.service, 'warning')}>
+                          <Box sx={{ mt: 1, ml: 2 }}>
+                            {item.statuses
+                              .filter(s => s.status >= 300 && s.status < 400)
+                              .sort((a, b) => a.status - b.status)
+                              .map(status => (
+                                <Box
+                                  key={status.status}
+                                  sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    mb: 0.5,
+                                    pl: 1,
+                                    borderLeft: `2px solid ${theme.palette.warning.main}`,
+                                  }}
+                                >
+                                  <Typography variant="caption" color="text.secondary">
+                                    HTTP {status.status}
+                                  </Typography>
+                                  <Typography variant="caption" color="warning.main" fontWeight={500}>
+                                    {status.count.toLocaleString()}
+                                  </Typography>
+                                </Box>
+                              ))}
+                          </Box>
+                        </Collapse>
+                      </Box>
+                    )}
+
+                    {/* Error bar (4xx/5xx) */}
+                    {item.error > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mb: 0.5,
+                            cursor: 'pointer',
+                            '&:hover': {
+                              '& .status-label': { opacity: 0.8 },
+                            },
+                          }}
+                          onClick={() => toggleServiceExpansion(item.service, 'error')}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="caption"
+                              color="error.main"
+                              fontWeight={500}
+                              className="status-label"
+                            >
+                              Error (4xx/5xx)
+                            </Typography>
+                            <IconButton size="small" sx={{ p: 0 }}>
+                              {isServiceExpanded(item.service, 'error') ? (
+                                <ExpandLess sx={{ fontSize: 16, color: 'error.main' }} />
+                              ) : (
+                                <ExpandMore sx={{ fontSize: 16, color: 'error.main' }} />
+                              )}
+                            </IconButton>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.error.toLocaleString()}
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={(item.error / item.totalRequests) * 100}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.error.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              backgroundColor: theme.palette.error.main,
+                            },
+                            cursor: 'pointer',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          }}
+                          onClick={() => toggleServiceExpansion(item.service, 'error')}
+                        />
+                        <Collapse in={isServiceExpanded(item.service, 'error')}>
+                          <Box sx={{ mt: 1, ml: 2 }}>
+                            {item.statuses
+                              .filter(s => s.status >= 400)
+                              .sort((a, b) => a.status - b.status)
+                              .map(status => (
+                                <Box
+                                  key={status.status}
+                                  sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    mb: 0.5,
+                                    pl: 1,
+                                    borderLeft: `2px solid ${theme.palette.error.main}`,
+                                  }}
+                                >
+                                  <Typography variant="caption" color="text.secondary">
+                                    HTTP {status.status}
+                                  </Typography>
+                                  <Typography variant="caption" color="error.main" fontWeight={500}>
+                                    {status.count.toLocaleString()}
+                                  </Typography>
+                                </Box>
+                              ))}
+                          </Box>
+                        </Collapse>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              </ListItem>
+            ))}
+          </List>
         </Box>
       )}
     </Paper>

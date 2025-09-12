@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Request
-from app.core.auth_dependency import authenticate_user_endpoint
+from app.core.auth_dependency import authenticate_user_endpoint, get_auth_service
 from app.core.rate_limiting import auth_test_rate_limit
 from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -24,7 +24,8 @@ async def test_user_auth(
             "type": current_user["type"],
             "permissions": current_user["permissions"]
         },
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "thresholds": get_auth_service().get_dashboard_thresholds(),
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "rate_limit_info": {
             "endpoint": "auth_test",
             "limit": "10/minute",

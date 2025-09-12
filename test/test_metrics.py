@@ -6,7 +6,6 @@ import json
 from datetime import datetime, timedelta
 from test_config import (
     METRICS_AGGREGATE_ENDPOINT,
-    METRICS_RAW_ENDPOINT,
     METRICS_REALTIME_ENDPOINT,
     VALID_USER_API_KEYS,
     INVALID_API_KEYS,
@@ -61,116 +60,70 @@ class TestMetricsEndpoints:
             except Exception as e:
                 self.log_test(f"Valid {username} aggregate metrics", False, f"Exception: {str(e)}")
     
-    def test_valid_user_raw_metrics(self):
-        """Test raw metrics with valid user API keys"""
-        print("\n🔍 Testing valid user raw metrics...")
-        
-        for username, api_key in VALID_USER_API_KEYS.items():
-            headers = {"X-API-Key": api_key}
-            params = {"limit": 10}
-            
-            try:
-                response = self.session.get(METRICS_RAW_ENDPOINT, headers=headers, params=params)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    self.log_test(
-                        f"Valid {username} raw metrics", 
-                        True, 
-                        f"Retrieved {len(data)} records"
-                    )
-                else:
-                    self.log_test(
-                        f"Valid {username} raw metrics", 
-                        False, 
-                        f"Status {response.status_code}: {response.text}"
-                    )
-                    
-            except Exception as e:
-                self.log_test(f"Valid {username} raw metrics", False, f"Exception: {str(e)}")
-    
     def test_invalid_api_key_metrics(self):
         """Test metrics endpoints with invalid API keys"""
         print("\n🔍 Testing invalid API key metrics...")
-        
-        endpoints = [
-            ("aggregate", METRICS_AGGREGATE_ENDPOINT),
-            ("raw", METRICS_RAW_ENDPOINT)
-        ]
-        
-        for endpoint_name, endpoint_url in endpoints:
-            for invalid_key in INVALID_API_KEYS:
-                headers = {}
-                if invalid_key is not None:
-                    headers["X-API-Key"] = invalid_key
-                
-                try:
-                    response = self.session.get(endpoint_url, headers=headers)
-                    
-                    if response.status_code == 401:
-                        self.log_test(f"Invalid API key {endpoint_name} metrics", True, "Correctly rejected")
-                    else:
-                        self.log_test(
-                            f"Invalid API key {endpoint_name} metrics", 
-                            False, 
-                            f"Expected 401, got {response.status_code}: {response.text}"
-                        )
-                        
-                except Exception as e:
-                    self.log_test(f"Invalid API key {endpoint_name} metrics", False, f"Exception: {str(e)}")
+
+        for invalid_key in INVALID_API_KEYS:
+            headers = {}
+            if invalid_key is not None:
+                headers["X-API-Key"] = invalid_key
+
+            try:
+                response = self.session.get(METRICS_AGGREGATE_ENDPOINT, headers=headers)
+
+                if response.status_code == 401:
+                    self.log_test("Invalid API key aggregate metrics", True, "Correctly rejected")
+                else:
+                    self.log_test(
+                        "Invalid API key aggregate metrics",
+                        False,
+                        f"Expected 401, got {response.status_code}: {response.text}"
+                    )
+
+            except Exception as e:
+                self.log_test("Invalid API key aggregate metrics", False, f"Exception: {str(e)}")
     
     def test_service_api_key_metrics(self):
         """Test that service API keys are rejected for metrics endpoints"""
         print("\n🔍 Testing service API key rejection for metrics...")
-        
-        endpoints = [
-            ("aggregate", METRICS_AGGREGATE_ENDPOINT),
-            ("raw", METRICS_RAW_ENDPOINT)
-        ]
-        
-        for endpoint_name, endpoint_url in endpoints:
-            for service_name, api_key in VALID_SERVICE_API_KEYS.items():
-                headers = {"X-API-Key": api_key}
-                
-                try:
-                    response = self.session.get(endpoint_url, headers=headers)
-                    
-                    if response.status_code == 403:
-                        self.log_test(f"Service API key '{service_name}' rejected for {endpoint_name}", True, "Correctly rejected")
-                    else:
-                        self.log_test(
-                            f"Service API key '{service_name}' rejected for {endpoint_name}", 
-                            False, 
-                            f"Expected 403, got {response.status_code}: {response.text}"
-                        )
-                        
-                except Exception as e:
-                    self.log_test(f"Service API key '{service_name}' rejected for {endpoint_name}", False, f"Exception: {str(e)}")
+
+        for service_name, api_key in VALID_SERVICE_API_KEYS.items():
+            headers = {"X-API-Key": api_key}
+
+            try:
+                response = self.session.get(METRICS_AGGREGATE_ENDPOINT, headers=headers)
+
+                if response.status_code == 403:
+                    self.log_test(f"Service API key '{service_name}' rejected for aggregate", True, "Correctly rejected")
+                else:
+                    self.log_test(
+                        f"Service API key '{service_name}' rejected for aggregate",
+                        False,
+                        f"Expected 403, got {response.status_code}: {response.text}"
+                    )
+
+            except Exception as e:
+                self.log_test(f"Service API key '{service_name}' rejected for aggregate", False, f"Exception: {str(e)}")
     
     def test_missing_api_key_metrics(self):
         """Test metrics endpoints without API key"""
         print("\n🔍 Testing missing API key metrics...")
-        
-        endpoints = [
-            ("aggregate", METRICS_AGGREGATE_ENDPOINT),
-            ("raw", METRICS_RAW_ENDPOINT)
-        ]
-        
-        for endpoint_name, endpoint_url in endpoints:
-            try:
-                response = self.session.get(endpoint_url)
-                
-                if response.status_code == 401:
-                    self.log_test(f"Missing API key {endpoint_name} metrics", True, "Correctly rejected")
-                else:
-                    self.log_test(
-                        f"Missing API key {endpoint_name} metrics", 
-                        False, 
-                        f"Expected 401, got {response.status_code}: {response.text}"
-                    )
-                    
-            except Exception as e:
-                self.log_test(f"Missing API key {endpoint_name} metrics", False, f"Exception: {str(e)}")
+
+        try:
+            response = self.session.get(METRICS_AGGREGATE_ENDPOINT)
+
+            if response.status_code == 401:
+                self.log_test("Missing API key aggregate metrics", True, "Correctly rejected")
+            else:
+                self.log_test(
+                    "Missing API key aggregate metrics",
+                    False,
+                    f"Expected 401, got {response.status_code}: {response.text}"
+                )
+
+        except Exception as e:
+            self.log_test("Missing API key aggregate metrics", False, f"Exception: {str(e)}")
     
     def test_metrics_filters(self):
         """Test metrics endpoints with various filters"""
@@ -189,33 +142,27 @@ class TestMetricsEndpoints:
             {"interval": "1hour", "limit": 5},
             {"service": "auth-service", "method": "POST", "limit": 5},
         ]
-        
-        endpoints = [
-            ("aggregate", METRICS_AGGREGATE_ENDPOINT),
-            ("raw", METRICS_RAW_ENDPOINT)
-        ]
-        
-        for endpoint_name, endpoint_url in endpoints:
-            for i, filters in enumerate(filter_tests):
-                try:
-                    response = self.session.get(endpoint_url, headers=headers, params=filters)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        self.log_test(
-                            f"Metrics filters {endpoint_name} {i+1}", 
-                            True, 
-                            f"Retrieved {len(data)} records with filters"
-                        )
-                    else:
-                        self.log_test(
-                            f"Metrics filters {endpoint_name} {i+1}", 
-                            False, 
-                            f"Status {response.status_code}: {response.text}"
-                        )
-                        
-                except Exception as e:
-                    self.log_test(f"Metrics filters {endpoint_name} {i+1}", False, f"Exception: {str(e)}")
+
+        for i, filters in enumerate(filter_tests):
+            try:
+                response = self.session.get(METRICS_AGGREGATE_ENDPOINT, headers=headers, params=filters)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    self.log_test(
+                        f"Metrics filters aggregate {i+1}",
+                        True,
+                        f"Retrieved {len(data)} records with filters"
+                    )
+                else:
+                    self.log_test(
+                        f"Metrics filters aggregate {i+1}",
+                        False,
+                        f"Status {response.status_code}: {response.text}"
+                    )
+
+            except Exception as e:
+                self.log_test(f"Metrics filters aggregate {i+1}", False, f"Exception: {str(e)}")
     
     def test_time_range_filters(self):
         """Test metrics endpoints with time range filters"""
@@ -236,33 +183,27 @@ class TestMetricsEndpoints:
             {"end_time": now.isoformat(), "limit": 5},
             {"start_time": one_day_ago.isoformat(), "end_time": now.isoformat(), "limit": 5},
         ]
-        
-        endpoints = [
-            ("aggregate", METRICS_AGGREGATE_ENDPOINT),
-            ("raw", METRICS_RAW_ENDPOINT)
-        ]
-        
-        for endpoint_name, endpoint_url in endpoints:
-            for i, time_filters in enumerate(time_tests):
-                try:
-                    response = self.session.get(endpoint_url, headers=headers, params=time_filters)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        self.log_test(
-                            f"Time range {endpoint_name} {i+1}", 
-                            True, 
-                            f"Retrieved {len(data)} records with time filters"
-                        )
-                    else:
-                        self.log_test(
-                            f"Time range {endpoint_name} {i+1}", 
-                            False, 
-                            f"Status {response.status_code}: {response.text}"
-                        )
-                        
-                except Exception as e:
-                    self.log_test(f"Time range {endpoint_name} {i+1}", False, f"Exception: {str(e)}")
+
+        for i, time_filters in enumerate(time_tests):
+            try:
+                response = self.session.get(METRICS_AGGREGATE_ENDPOINT, headers=headers, params=time_filters)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    self.log_test(
+                        f"Time range aggregate {i+1}",
+                        True,
+                        f"Retrieved {len(data)} records with time filters"
+                    )
+                else:
+                    self.log_test(
+                        f"Time range aggregate {i+1}",
+                        False,
+                        f"Status {response.status_code}: {response.text}"
+                    )
+
+            except Exception as e:
+                self.log_test(f"Time range aggregate {i+1}", False, f"Exception: {str(e)}")
     
     def test_invalid_parameters(self):
         """Test metrics endpoints with invalid parameters"""
@@ -279,34 +220,28 @@ class TestMetricsEndpoints:
             {"interval": "invalid"},  # Invalid interval
             {"limit": "not_a_number"},  # Non-numeric limit
         ]
-        
-        endpoints = [
-            ("aggregate", METRICS_AGGREGATE_ENDPOINT),
-            ("raw", METRICS_RAW_ENDPOINT)
-        ]
-        
-        for endpoint_name, endpoint_url in endpoints:
-            for i, params in enumerate(invalid_params):
-                try:
-                    response = self.session.get(endpoint_url, headers=headers, params=params)
-                    
-                    # Some invalid parameters might be handled gracefully (e.g., default values)
-                    # So we accept both 200 (with defaults) and 422 (validation error)
-                    if response.status_code in [200, 422]:
-                        self.log_test(
-                            f"Invalid params {endpoint_name} {i+1}", 
-                            True, 
-                            f"Handled gracefully (status {response.status_code})"
-                        )
-                    else:
-                        self.log_test(
-                            f"Invalid params {endpoint_name} {i+1}", 
-                            False, 
-                            f"Unexpected status {response.status_code}: {response.text}"
-                        )
-                        
-                except Exception as e:
-                    self.log_test(f"Invalid params {endpoint_name} {i+1}", False, f"Exception: {str(e)}")
+
+        for i, params in enumerate(invalid_params):
+            try:
+                response = self.session.get(METRICS_AGGREGATE_ENDPOINT, headers=headers, params=params)
+
+                # Some invalid parameters might be handled gracefully (e.g., default values)
+                # So we accept both 200 (with defaults) and 422 (validation error)
+                if response.status_code in [200, 422]:
+                    self.log_test(
+                        f"Invalid params aggregate {i+1}",
+                        True,
+                        f"Handled gracefully (status {response.status_code})"
+                    )
+                else:
+                    self.log_test(
+                        f"Invalid params aggregate {i+1}",
+                        False,
+                        f"Unexpected status {response.status_code}: {response.text}"
+                    )
+
+            except Exception as e:
+                self.log_test(f"Invalid params aggregate {i+1}", False, f"Exception: {str(e)}")
 
     def test_realtime_endpoint(self):
         """Test the realtime metrics endpoint"""
@@ -511,7 +446,6 @@ class TestMetricsEndpoints:
         print("=" * 50)
         
         self.test_valid_user_aggregate_metrics()
-        self.test_valid_user_raw_metrics()
         self.test_invalid_api_key_metrics()
         self.test_service_api_key_metrics()
         self.test_missing_api_key_metrics()

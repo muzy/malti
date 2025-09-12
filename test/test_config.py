@@ -163,7 +163,6 @@ SAMPLE_TELEMETRY_DATA = generate_sample_telemetry_data()
 # Endpoints
 INGEST_ENDPOINT = f"{BASE_URL}{INGEST_PATH}"
 METRICS_AGGREGATE_ENDPOINT = f"{BASE_URL}{METRICS_PATH}/aggregate"
-METRICS_RAW_ENDPOINT = f"{BASE_URL}{METRICS_PATH}/raw"
 METRICS_REALTIME_ENDPOINT = f"{BASE_URL}{METRICS_PATH}/aggregate/realtime"
 HEALTH_ENDPOINT = f"{BASE_URL}/health"
 ROOT_ENDPOINT = f"{BASE_URL}/"
@@ -178,5 +177,4 @@ def print_loaded_config():
     print(f"  Sample data entries: {len(SAMPLE_TELEMETRY_DATA)}")
     print(f"  Ingest endpoint: {INGEST_ENDPOINT}")
     print(f"  Metrics aggregate endpoint: {METRICS_AGGREGATE_ENDPOINT}")
-    print(f"  Metrics raw endpoint: {METRICS_RAW_ENDPOINT}")
     print(f"  Metrics realtime endpoint: {METRICS_REALTIME_ENDPOINT}")

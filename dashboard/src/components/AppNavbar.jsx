@@ -9,7 +9,7 @@ import {
   Button,
 } from '@mui/material';
 import { LogoutOutlined } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 const AppNavbar = () => {
   const { user, logout } = useAuth();

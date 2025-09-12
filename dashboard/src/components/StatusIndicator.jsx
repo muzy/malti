@@ -10,6 +10,7 @@ import {
   Warning,
   Error,
 } from '@mui/icons-material';
+import { getErrorRateColor, getLatencyColor } from '../utils/statusUtils';
 
 const StatusIndicator = ({ data }) => {
   const calculateStats = () => {
@@ -67,10 +68,10 @@ const StatusIndicator = ({ data }) => {
         </Box>
         
         <Box sx={{ textAlign: 'center' }}>
-          <Typography 
-            variant="h5" 
-            fontWeight={700} 
-            color={stats.errorRate > 5 ? 'error.main' : stats.errorRate > 1 ? 'warning.main' : 'success.main'}
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            color={getErrorRateColor(stats.errorRate)}
           >
             {stats.errorRate.toFixed(1)}%
           </Typography>
@@ -80,10 +81,10 @@ const StatusIndicator = ({ data }) => {
         </Box>
         
         <Box sx={{ textAlign: 'center' }}>
-          <Typography 
-            variant="h5" 
-            fontWeight={700} 
-            color={stats.avgLatency > 1000 ? 'error.main' : stats.avgLatency > 500 ? 'warning.main' : 'success.main'}
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            color={getLatencyColor(stats.avgLatency)}
           >
             {stats.avgLatency.toFixed(0)}ms
           </Typography>

@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.models.telemetry import MetricsQuery, AggregatedMetrics, RawMetrics
+from app.models.telemetry import MetricsQuery, AggregatedMetrics
 from typing import List
 from datetime import datetime, timezone, timedelta
 
@@ -112,85 +112,6 @@ class MetricsService:
                     max_response_time=row.max_response_time,
                     avg_response_time=row.avg_response_time,
                     p95_response_time=row.p95_response_time
-                )
-                for row in rows
-            ]
-        except Exception as e:
-            raise e
-    
-    async def get_raw_metrics(self, query: MetricsQuery) -> List[RawMetrics]:
-        """Get raw metrics based on query parameters"""
-        
-        # Build WHERE clause
-        where_conditions = []
-        params = {}
-        
-        if query.service:
-            where_conditions.append("service = :service")
-            params['service'] = query.service
-        
-        if query.node:
-            where_conditions.append("node = :node")
-            params['node'] = query.node
-        
-        if query.method:
-            where_conditions.append("method = :method")
-            params['method'] = query.method
-        
-        if query.endpoint:
-            where_conditions.append("endpoint = :endpoint")
-            params['endpoint'] = query.endpoint
-        
-        if query.consumer:
-            where_conditions.append('consumer = :consumer')
-            params['consumer'] = query.consumer
-
-        if query.context:
-            where_conditions.append('context = :context')
-            params['context'] = query.context
-
-        if query.start_time:
-            where_conditions.append("created_at >= :start_time")
-            params['start_time'] = query.start_time
-
-        if query.end_time:
-            where_conditions.append("created_at <= :end_time")
-            params['end_time'] = query.end_time
-        
-        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-        
-        # Build query
-        sql_query = text(f"""
-            SELECT
-                service,
-                node,
-                method,
-                endpoint,
-                consumer,
-                context,
-                created_at,
-                status,
-                response_time
-            FROM requests
-            WHERE {where_clause}
-            ORDER BY created_at DESC
-        """)
-        
-        try:
-            result = await self.db.execute(sql_query, params)
-            rows = result.fetchall()
-            
-            return [
-                RawMetrics(
-                    service=row.service,
-                    node=row.node,
-                    method=row.method,
-                    endpoint=row.endpoint,
-                    consumer=row.consumer,
-                    context=row.context,
-                    created_at=row.created_at,
-                    status=row.status,
-                    response_time=row.response_time
                 )
                 for row in rows
             ]

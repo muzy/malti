@@ -8,7 +8,7 @@ import {
   Toolbar,
   alpha,
 } from '@mui/material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import AppNavbar from '../components/AppNavbar';
 import FiltersPanel from '../components/FiltersPanel';
 import MetricsCards from '../components/MetricsCards';

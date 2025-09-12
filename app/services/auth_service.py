@@ -19,6 +19,7 @@ class AuthService:
         self.users: Dict[str, Dict[str, Any]] = {}
         self.api_key_to_service: Dict[str, str] = {}
         self.api_key_to_user: Dict[str, Dict[str, Any]] = {}
+        self.dashboard_thresholds: Dict[str, Any] = {}
         self._load_config()
     
     def _load_config(self) -> None:
@@ -42,6 +43,7 @@ class AuthService:
             self.users.clear()
             self.api_key_to_service.clear()
             self.api_key_to_user.clear()
+            self.dashboard_thresholds.clear()
             
             # Load services
             services_config = config.get('services', {})
@@ -65,10 +67,22 @@ class AuthService:
                     }
                     self.users[username] = user_data
                     self.api_key_to_user[api_key] = user_data
-            
+
+            # Load dashboard thresholds
+            dashboard_config = config.get('dashboard', {})
+            thresholds_config = dashboard_config.get('thresholds', {})
+
+            # Load with defaults if not specified
+            self.dashboard_thresholds = {
+                'error_rate_success_threshold': thresholds_config.get('error_rate_success_threshold', 1.0),
+                'error_rate_warning_threshold': thresholds_config.get('error_rate_warning_threshold', 2.0),
+                'latency_success_threshold': thresholds_config.get('latency_success_threshold', 300),
+                'latency_warning_threshold': thresholds_config.get('latency_warning_threshold', 600)
+            }
+
             self.config_mtime = current_mtime
-            
-            logger.info(f"Loaded {len(self.services)} services and {len(self.users)} users from config")
+
+            logger.info(f"Loaded {len(self.services)} services, {len(self.users)} users, and dashboard thresholds from config")
             
         except Exception as e:
             logger.error(f"Error loading config: {e}")
@@ -128,6 +142,11 @@ class AuthService:
     def get_user_info(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user information by username"""
         return self.users.get(username)
+
+    def get_dashboard_thresholds(self) -> Dict[str, Any]:
+        """Get dashboard thresholds for visual indicators"""
+        self._check_config_changed()
+        return self.dashboard_thresholds.copy()
     
     def validate_api_key(self, api_key: str) -> Optional[Dict[str, Any]]:
         """Validate API key and return authentication info"""

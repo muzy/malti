@@ -35,3 +35,18 @@ api_key = "user2-api-key"
 base_url = "http://localhost:8000"
 ingest_endpoint = "/api/v1/ingest"
 metrics_endpoint = "/api/v1/metrics"
+
+[dashboard]
+# Dashboard-specific configuration for visual indicators and thresholds
+# These thresholds are used by the web dashboard to color-code metrics
+
+[dashboard.thresholds]
+# Error rate thresholds (in percentage) - used for coloring error rate displays
+error_rate_success_threshold = 0.5     # Error rate <= 1% displays as green (success)
+error_rate_warning_threshold = 1.0     # Error rate > 1% and <= 5% displays as yellow/orange (warning)
+                                       # Error rate > 5% displays as red (error)
+
+# Latency thresholds (in milliseconds) - used for coloring latency displays
+latency_success_threshold = 300        # Latency <= 500ms displays as green (success)
+latency_warning_threshold = 800       # Latency > 500ms and <= 1000ms displays as yellow/orange (warning)
+                                       # Latency > 1000ms displays as red (error)

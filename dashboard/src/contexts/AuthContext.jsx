@@ -1,14 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-
-const AuthContext = createContext();
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+import React, { useState, useCallback, useEffect } from 'react';
+import { updateThresholds } from '../utils/statusUtils';
+import { AuthContext } from '../hooks/useAuth';
 
 const STORAGE_KEY = 'malti_api_key';
 
@@ -24,13 +16,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState(null);
-
-  // Auto-login on mount if we have a cached key
-  useEffect(() => {
-    if (apiKey && !isAuthenticated) {
-      login(apiKey);
-    }
-  }, []);
 
   const login = useCallback(async (key) => {
     try {
@@ -48,6 +33,11 @@ export const AuthProvider = ({ children }) => {
         setUser(data.user);
         setIsAuthenticated(true);
         setError(null);
+
+        // Update global thresholds with values from API
+        if (data.thresholds) {
+          updateThresholds(data.thresholds);
+        }
         
         // Cache the key in localStorage
         try {
@@ -77,6 +67,13 @@ export const AuthProvider = ({ children }) => {
       return false;
     }
   }, []);
+
+  // Auto-login on mount if we have a cached key
+  useEffect(() => {
+    if (apiKey && !isAuthenticated) {
+      login(apiKey);
+    }
+  }, [apiKey, isAuthenticated, login]);
 
   const logout = useCallback(() => {
     setApiKey(null);

@@ -1,39 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Typography,
   Box,
   List,
   ListItem,
-  ListItemIcon,
-  ListItemText,
   Chip,
+  LinearProgress,
+  Collapse,
+  IconButton,
   alpha,
+  useTheme,
 } from '@mui/material';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
-import { Circle } from '@mui/icons-material';
+import { ExpandMore, ExpandLess } from '@mui/icons-material';
+import { getErrorRateColor } from '../utils/statusUtils';
 
-const COLORS = [
-  '#1976d2', // Primary blue
-  '#2e7d32', // Green
-  '#ed6c02', // Orange
-  '#d32f2f', // Red
-  '#7b1fa2', // Purple
-  '#00796b', // Teal
-  '#f57c00', // Amber
-  '#c2185b', // Pink
-  '#5d4037', // Brown
-  '#455a64', // Blue grey
-];
 
 const ConsumerChart = ({ data }) => {
+  const theme = useTheme();
+  const [expandedConsumers, setExpandedConsumers] = useState(new Set());
+
   const prepareConsumerData = () => {
     if (!data || data.length === 0) return [];
     
@@ -61,54 +47,27 @@ const ConsumerChart = ({ data }) => {
   };
 
   const consumerData = prepareConsumerData();
-  const totalRequests = consumerData.reduce((sum, item) => sum + item.value, 0);
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <Paper sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="subtitle2" gutterBottom>
-            {data.name}
-          </Typography>
-          <Typography variant="body2">
-            Requests: {data.value.toLocaleString()} ({((data.value / totalRequests) * 100).toFixed(1)}%)
-          </Typography>
-          <Typography variant="body2" color="error">
-            Errors: {data.errors.toLocaleString()} ({data.errorRate.toFixed(1)}%)
-          </Typography>
-        </Paper>
-      );
-    }
-    return null;
+  const toggleConsumerExpansion = (consumer) => {
+    setExpandedConsumers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(consumer)) {
+        newSet.delete(consumer);
+      } else {
+        newSet.add(consumer);
+      }
+      return newSet;
+    });
   };
 
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-    if (percent < 0.05) return null; // Hide labels for slices < 5%
-    
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    return (
-      <text 
-        x={x} 
-        y={y} 
-        fill="white" 
-        textAnchor={x > cx ? 'start' : 'end'} 
-        dominantBaseline="central"
-        fontSize={12}
-        fontWeight={600}
-      >
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
+  const isConsumerExpanded = (consumer) => {
+    return expandedConsumers.has(consumer);
   };
+
 
   return (
-    <Paper 
-      sx={{ 
+    <Paper
+      sx={{
         p: 3,
         borderRadius: 2,
         width: '100%',
@@ -120,86 +79,228 @@ const ConsumerChart = ({ data }) => {
       <Typography variant="h6" gutterBottom fontWeight={600}>
         Request Distribution by Consumer
       </Typography>
-      
+
       {consumerData.length === 0 ? (
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           height: 200,
-          color: 'text.secondary' 
+          color: 'text.secondary'
         }}>
           <Typography variant="body1">No data available</Typography>
         </Box>
       ) : (
         <Box sx={{ mt: 2 }}>
-          {/* Pie Chart */}
-          <Box sx={{ height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={consumerData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={renderCustomizedLabel}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {consumerData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={COLORS[index % COLORS.length]} 
-                    />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </Box>
-          
-          {/* Legend List */}
-          <Box sx={{ mt: 2, maxHeight: 120, overflow: 'auto' }}>
-            <List dense>
-              {consumerData.map((item, index) => (
-                <ListItem key={item.name} sx={{ py: 0.5 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <Circle 
-                      sx={{ 
-                        color: COLORS[index % COLORS.length],
-                        fontSize: 16,
-                      }} 
-                    />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" fontWeight={500}>
-                          {item.name}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Chip
-                            label={`${item.value.toLocaleString()} req`}
-                            size="small"
-                            variant="outlined"
-                          />
-                          {item.errors > 0 && (
-                            <Chip
-                              label={`${item.errorRate.toFixed(1)}% err`}
-                              size="small"
-                              color="error"
-                              variant="outlined"
-                            />
-                          )}
+          <List sx={{ p: 0 }}>
+            {consumerData.map((item) => (
+              <ListItem
+                key={item.name}
+                sx={{
+                  borderRadius: 2,
+                  mb: 1,
+                  p: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                    borderColor: theme.palette.primary.main,
+                  },
+                  transition: 'all 0.2s ease-in-out',
+                }}
+              >
+                <Box sx={{ width: '100%' }}>
+                  {/* Header with consumer name and stats */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontWeight: 600,
+                        maxWidth: { xs: 200, md: 400 },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.name}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Typography
+                        variant="body2"
+                        color={getErrorRateColor(item.errorRate)}
+                        fontWeight={600}
+                      >
+                        {item.errorRate.toFixed(1)}% errors
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        in
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {item.value.toLocaleString()} requests
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Progress bars */}
+                  <Box sx={{ mb: 1 }}>
+                    {/* Success bar (successful requests) */}
+                    {item.value - item.errors > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mb: 0.5,
+                            cursor: 'pointer',
+                            '&:hover': {
+                              '& .status-label': { opacity: 0.8 },
+                            },
+                          }}
+                          onClick={() => toggleConsumerExpansion(item.name)}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="caption"
+                              color="success.main"
+                              fontWeight={500}
+                              className="status-label"
+                            >
+                              Successful Requests
+                            </Typography>
+                            <IconButton size="small" sx={{ p: 0 }}>
+                              {isConsumerExpanded(item.name) ? (
+                                <ExpandLess sx={{ fontSize: 16, color: 'success.main' }} />
+                              ) : (
+                                <ExpandMore sx={{ fontSize: 16, color: 'success.main' }} />
+                              )}
+                            </IconButton>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {(item.value - item.errors).toLocaleString()}
+                          </Typography>
                         </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={((item.value - item.errors) / item.value) * 100}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.success.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              backgroundColor: theme.palette.success.main,
+                            },
+                            cursor: 'pointer',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          }}
+                          onClick={() => toggleConsumerExpansion(item.name)}
+                        />
+                        <Collapse in={isConsumerExpanded(item.name)}>
+                          <Box sx={{ mt: 1, ml: 2 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                mb: 0.5,
+                                pl: 1,
+                                borderLeft: `2px solid ${theme.palette.success.main}`,
+                              }}
+                            >
+                              <Typography variant="caption" color="text.secondary">
+                                Success Rate
+                              </Typography>
+                              <Typography variant="caption" color="success.main" fontWeight={500}>
+                                {((item.value - item.errors) / item.value * 100).toFixed(1)}%
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Collapse>
                       </Box>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
+                    )}
+
+                    {/* Error bar (failed requests) */}
+                    {item.errors > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mb: 0.5,
+                            cursor: 'pointer',
+                            '&:hover': {
+                              '& .status-label': { opacity: 0.8 },
+                            },
+                          }}
+                          onClick={() => toggleConsumerExpansion(item.name)}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="caption"
+                              color="error.main"
+                              fontWeight={500}
+                              className="status-label"
+                            >
+                              Failed Requests
+                            </Typography>
+                            <IconButton size="small" sx={{ p: 0 }}>
+                              {isConsumerExpanded(item.name) ? (
+                                <ExpandLess sx={{ fontSize: 16, color: 'error.main' }} />
+                              ) : (
+                                <ExpandMore sx={{ fontSize: 16, color: 'error.main' }} />
+                              )}
+                            </IconButton>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.errors.toLocaleString()}
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={(item.errors / item.value) * 100}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.error.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              backgroundColor: theme.palette.error.main,
+                            },
+                            cursor: 'pointer',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          }}
+                          onClick={() => toggleConsumerExpansion(item.name)}
+                        />
+                        <Collapse in={isConsumerExpanded(item.name)}>
+                          <Box sx={{ mt: 1, ml: 2 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                mb: 0.5,
+                                pl: 1,
+                                borderLeft: `2px solid ${theme.palette.error.main}`,
+                              }}
+                            >
+                              <Typography variant="caption" color="text.secondary">
+                                Error Rate
+                              </Typography>
+                              <Typography variant="caption" color="error.main" fontWeight={500}>
+                                {item.errorRate.toFixed(1)}%
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Collapse>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              </ListItem>
+            ))}
+          </List>
         </Box>
       )}
     </Paper>

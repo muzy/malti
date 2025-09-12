@@ -293,7 +293,7 @@ const MetricsCards = ({ data, timeRange }) => {
             title="Average Latency"
             value={`${metrics.avgLatency.toFixed(1)}ms`}
             icon={Speed}
-            color="secondary"
+            color="warning"
             chartData={chartData.avgLatencyChart}
             chartType="line"
           />
@@ -315,7 +315,7 @@ const MetricsCards = ({ data, timeRange }) => {
             title="Max Latency"
             value={`${metrics.maxLatency.toFixed(1)}ms`}
             icon={HourglassFull}
-            color="warning"
+            color="error"
             chartData={chartData.maxLatencyChart}
             chartType="line"
           />

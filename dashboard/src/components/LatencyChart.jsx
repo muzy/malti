@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Typography,
   Box,
+  Button,
   alpha,
   useTheme,
 } from '@mui/material';
 import {
   LineChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,6 +21,8 @@ import {
 
 const LatencyChart = ({ data, height = 350, timeRange }) => {
   const theme = useTheme();
+  const [isLeftLogScale, setIsLeftLogScale] = useState(false);
+  const [isRightLogScale, setIsRightLogScale] = useState(false);
   const prepareTimeSeriesData = () => {
     if (!data || data.length === 0) return [];
 
@@ -138,11 +142,25 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
 
     // Calculate weighted averages and sort by time
     return Array.from(filledBuckets.values())
-      .map(bucket => ({
-        ...bucket,
-        avgLatency: bucket.totalRequests > 0 ? bucket.weightedLatency / bucket.totalRequests : 0,
-        minLatency: bucket.minLatency === Infinity ? 0 : bucket.minLatency,
-      }))
+      .map(bucket => {
+        const avgLatency = bucket.totalRequests > 0 ? bucket.weightedLatency / bucket.totalRequests : 0;
+        const minLatency = bucket.minLatency === Infinity ? 0 : bucket.minLatency;
+        const maxLatency = bucket.maxLatency;
+
+        // Ensure minimum values for log scale compatibility
+        const adjustedAvgLatency = avgLatency <= 0 ? 0.1 : avgLatency;
+        const adjustedMinLatency = minLatency <= 0 ? 0.1 : minLatency;
+        const adjustedMaxLatency = maxLatency <= 0 ? 0.1 : maxLatency;
+        const adjustedTotalRequests = bucket.totalRequests <= 0 ? 1 : bucket.totalRequests;
+
+        return {
+          ...bucket,
+          avgLatency: adjustedAvgLatency,
+          minLatency: adjustedMinLatency,
+          maxLatency: adjustedMaxLatency,
+          totalRequests: adjustedTotalRequests,
+        };
+      })
       .sort((a, b) => a.timestamp - b.timestamp);
   };
 
@@ -155,15 +173,26 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
           <Typography variant="subtitle2" gutterBottom>
             {label}
           </Typography>
-          {payload.map((entry, index) => (
-            <Typography
-              key={index}
-              variant="body2"
-              sx={{ color: entry.color }}
-            >
-              {entry.name}: {entry.value.toFixed(1)}ms
-            </Typography>
-          ))}
+          {payload.map((entry, index) => {
+            // Use contrasting colors for better readability
+            let textColor = theme.palette.text.primary;
+            if (entry.name === 'Average Latency') textColor = theme.palette.warning.main;
+            else if (entry.name === 'Minimum Latency') textColor = theme.palette.success.main;
+            else if (entry.name === 'Maximum Latency') textColor = theme.palette.error.light;
+            else if (entry.name === 'Total Requests') textColor = theme.palette.primary.main;
+
+            return (
+              <Typography
+                key={index}
+                variant="body2"
+                sx={{ color: textColor }}
+              >
+                {entry.name}: {entry.name === 'Total Requests'
+                  ? entry.value.toLocaleString()
+                  : `${entry.value.toFixed(1)}ms`}
+              </Typography>
+            );
+          })}
         </Paper>
       );
     }
@@ -179,9 +208,37 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
         background: (theme) => theme.palette.background.paper,
       }}
     >
-      <Typography variant="h5" gutterBottom fontWeight={700} sx={{ mb: 3 }}>
-        Response Time Over Time
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" fontWeight={700}>
+          Response Time Over Time and Number of Requests
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant={isLeftLogScale ? "contained" : "outlined"}
+            size="small"
+            onClick={() => setIsLeftLogScale(!isLeftLogScale)}
+            sx={{
+              minWidth: 'auto',
+              px: 2,
+              fontSize: '0.75rem',
+            }}
+          >
+            Latency Log Scale
+          </Button>
+          <Button
+            variant={isRightLogScale ? "contained" : "outlined"}
+            size="small"
+            onClick={() => setIsRightLogScale(!isRightLogScale)}
+            sx={{
+              minWidth: 'auto',
+              px: 2,
+              fontSize: '0.75rem',
+            }}
+          >
+            Requests Log Scale
+          </Button>
+        </Box>
+      </Box>
       
       <Box sx={{ mt: 2, height }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -195,50 +252,81 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
               tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
               axisLine={{ stroke: theme.palette.divider }}
             />
-            <YAxis 
+            <YAxis
+              yAxisId="left"
+              scale={isLeftLogScale ? "log" : "linear"}
+              domain={isLeftLogScale ? [0.1, 'dataMax'] : ['dataMin', 'dataMax']}
               tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
               axisLine={{ stroke: theme.palette.divider }}
-              label={{ 
-                value: 'Response Time (ms)', 
-                angle: -90, 
+              label={{
+                value: 'Response Time (ms)',
+                angle: -90,
                 position: 'insideLeft',
                 style: { textAnchor: 'middle', fill: theme.palette.text.secondary }
               }}
             />
-            <Tooltip content={<CustomTooltip />} />
-            
-            {/* Average line */}
-            <Line
-              type="monotone"
-              dataKey="avgLatency"
-              stroke={theme.palette.primary.main}
-              strokeWidth={3}
-              dot={{ r: 4, fill: theme.palette.primary.main }}
-              activeDot={{ r: 6, fill: theme.palette.primary.main }}
-              name="Average Latency"
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              scale={isRightLogScale ? "log" : "linear"}
+              domain={isRightLogScale ? [1, 'dataMax'] : ['dataMin', 'dataMax']}
+              tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
+              axisLine={{ stroke: theme.palette.divider }}
+              label={{
+                value: 'Number of Requests',
+                angle: 90,
+                position: 'insideRight',
+                style: { textAnchor: 'middle', fill: theme.palette.text.secondary }
+              }}
             />
-            
+            <Tooltip content={<CustomTooltip />} />
+
+            {/* Request count bars (rendered first so lines appear on top) */}
+            <Bar
+              yAxisId="right"
+              dataKey="totalRequests"
+              fill={alpha(theme.palette.primary.dark, 0.6)}
+              stroke={alpha(theme.palette.primary.dark, 0.6)}
+              strokeWidth={1}
+              name="Total Requests"
+            />
+
             {/* Min line */}
             <Line
+              yAxisId="left"
               type="monotone"
               dataKey="minLatency"
               stroke={theme.palette.success.main}
-              strokeWidth={2}
-              strokeDasharray="5 5"
+              strokeWidth={3}
               dot={false}
+              activeDot={{ r: 8, fill: theme.palette.success.light }}
               name="Minimum Latency"
             />
-            
+
             {/* Max line */}
             <Line
+              yAxisId="left"
               type="monotone"
               dataKey="maxLatency"
-              stroke={theme.palette.warning.main}
-              strokeWidth={2}
-              strokeDasharray="5 5"
+              stroke={theme.palette.error.main}
+              strokeWidth={3}
               dot={false}
+              activeDot={{ r: 8, fill: theme.palette.error.light }}
               name="Maximum Latency"
             />
+
+            {/* Average line */}
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="avgLatency"
+              stroke={theme.palette.warning.main}
+              strokeWidth={4}
+              dot={{ r: 3, fill: theme.palette.warning.main }}
+              activeDot={{ r: 8, fill: theme.palette.warning.light }}
+              name="Average Latency"
+            />
+
           </ComposedChart>
         </ResponsiveContainer>
       </Box>

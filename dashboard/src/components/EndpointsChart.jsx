@@ -152,7 +152,7 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
                         backgroundColor: alpha(theme.palette.primary.main, 0.1),
                         '& .MuiLinearProgress-bar': {
                           borderRadius: 4,
-                          backgroundColor: theme.palette.primary.main,
+                          backgroundColor: alpha(theme.palette.primary.dark, 0.6),
                         },
                       }}
                     />
