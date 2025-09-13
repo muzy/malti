@@ -28,7 +28,7 @@ async def ingest_telemetry(
     
     # Validate that all requests belong to the authenticated service
     # Sanitize the service_name for comparison since request.service is sanitized
-    sanitized_service_name = TelemetryRequest.sanitize_string(service_name)
+    sanitized_service_name = TelemetryRequest.sanitize_field(service_name)
     for request in batch.requests:
         if request.service != sanitized_service_name:
             raise HTTPException(

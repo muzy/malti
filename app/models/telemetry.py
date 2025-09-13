@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
-import bleach
+import nh3
 
 class TelemetryRequest(BaseModel):
     """Single telemetry request data"""
@@ -22,9 +22,9 @@ class TelemetryRequest(BaseModel):
         if v is None:
             return v
 
-        # Convert to string and sanitize with bleach
-        # bleach.clean() removes all HTML tags and attributes by default
-        sanitized = bleach.clean(str(v), tags=[], attributes={}, strip=True)
+        # Convert to string and sanitize with nh3
+        # nh3.clean() with empty tags and attributes removes all HTML tags and attributes
+        sanitized = nh3.clean(str(v))
 
         # Remove null bytes and other control characters that might cause issues
         sanitized = sanitized.replace('\x00', '').replace('\r', '').replace('\n', ' ')

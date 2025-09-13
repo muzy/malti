@@ -7,4 +7,4 @@ httpx
 requests
 slowapi
 pydantic-settings
-bleach
+nh3
