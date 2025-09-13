@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
+import bleach
 
 class TelemetryRequest(BaseModel):
     """Single telemetry request data"""
@@ -13,6 +14,27 @@ class TelemetryRequest(BaseModel):
     consumer: str
     context: Optional[str] = None
     created_at: Optional[datetime] = None
+
+    @field_validator('service', 'node', 'method', 'endpoint', 'consumer', 'context', mode='before')
+    @classmethod
+    def sanitize_field(cls, v):
+        """Sanitize fields that may be displayed in the dashboard to prevent XSS attacks"""
+        if v is None:
+            return v
+
+        # Convert to string and sanitize with bleach
+        # bleach.clean() removes all HTML tags and attributes by default
+        sanitized = bleach.clean(str(v), tags=[], attributes={}, strip=True)
+
+        # Remove null bytes and other control characters that might cause issues
+        sanitized = sanitized.replace('\x00', '').replace('\r', '').replace('\n', ' ')
+
+        # Limit length to prevent DoS attacks (reasonable limit for telemetry fields)
+        max_length = 500
+        if len(sanitized) > max_length:
+            sanitized = sanitized[:max_length]
+
+        return sanitized.strip()
 
 class TelemetryBatch(BaseModel):
     """Batch of telemetry requests"""
@@ -31,7 +53,8 @@ class MetricsQuery(BaseModel):
     interval: str = "5min"
 
     
-    @validator('interval')
+    @field_validator('interval', mode='before')
+    @classmethod
     def validate_interval(cls, v):
         """Validate interval parameter"""
         valid_intervals = ['1min', '5min', '1hour']

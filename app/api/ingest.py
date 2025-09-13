@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.models.telemetry import TelemetryBatch
+from app.models.telemetry import TelemetryBatch, TelemetryRequest
 from app.services.telemetry_service import TelemetryService
 from app.core.auth_dependency import authenticate_service_endpoint
 from typing import Optional
@@ -27,11 +27,13 @@ async def ingest_telemetry(
         )
     
     # Validate that all requests belong to the authenticated service
+    # Sanitize the service_name for comparison since request.service is sanitized
+    sanitized_service_name = TelemetryRequest.sanitize_string(service_name)
     for request in batch.requests:
-        if request.service != service_name:
+        if request.service != sanitized_service_name:
             raise HTTPException(
-                status_code=403, 
-                detail=f"Service mismatch: expected {service_name}, got {request.service}"
+                status_code=403,
+                detail=f"Service mismatch: expected {sanitized_service_name}, got {request.service}"
             )
     
     # Store telemetry data
