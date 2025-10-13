@@ -29,6 +29,62 @@ class TestMetricsEndpoints:
             "message": message
         })
     
+    def validate_dashboard_response(self, data: dict) -> tuple[bool, str]:
+        """Validate that the response has the expected DashboardMetricsResponse structure"""
+        required_keys = ['time_series', 'metrics_summary', 'endpoints', 'status_distribution', 'consumers', 'system_overview']
+        
+        for key in required_keys:
+            if key not in data:
+                return False, f"Missing required key: {key}"
+        
+        # Validate time_series structure
+        if not isinstance(data['time_series'], list):
+            return False, "time_series should be a list"
+        
+        if len(data['time_series']) > 0:
+            ts_item = data['time_series'][0]
+            ts_required = ['bucket', 'total_requests']
+            for field in ts_required:
+                if field not in ts_item:
+                    return False, f"time_series item missing field: {field}"
+        
+        # Validate metrics_summary structure
+        if not isinstance(data['metrics_summary'], dict):
+            return False, "metrics_summary should be a dict"
+        
+        if 'total_requests' not in data['metrics_summary']:
+            return False, "metrics_summary missing total_requests"
+        
+        # Validate endpoints structure
+        if not isinstance(data['endpoints'], list):
+            return False, "endpoints should be a list"
+        
+        if len(data['endpoints']) > 0:
+            endpoint_item = data['endpoints'][0]
+            endpoint_required = ['endpoint', 'method', 'total_requests', 'error_count', 'error_rate']
+            for field in endpoint_required:
+                if field not in endpoint_item:
+                    return False, f"endpoints item missing field: {field}"
+        
+        # Validate status_distribution structure
+        if not isinstance(data['status_distribution'], list):
+            return False, "status_distribution should be a list"
+        
+        # Validate consumers structure
+        if not isinstance(data['consumers'], list):
+            return False, "consumers should be a list"
+        
+        # Validate system_overview structure
+        if not isinstance(data['system_overview'], dict):
+            return False, "system_overview should be a dict"
+        
+        overview_required = ['total_requests', 'total_errors', 'error_rate']
+        for field in overview_required:
+            if field not in data['system_overview']:
+                return False, f"system_overview missing field: {field}"
+        
+        return True, "Valid DashboardMetricsResponse structure"
+    
     def test_valid_user_aggregate_metrics(self):
         """Test aggregate metrics with valid user API keys"""
         print("\n🔍 Testing valid user aggregate metrics...")
@@ -36,7 +92,6 @@ class TestMetricsEndpoints:
         for username, api_key in VALID_USER_API_KEYS.items():
             headers = {"X-API-Key": api_key}
             params = {
-                "limit": 10,
                 "interval": "5min"
             }
             
@@ -45,11 +100,22 @@ class TestMetricsEndpoints:
                 
                 if response.status_code == 200:
                     data = response.json()
-                    self.log_test(
-                        f"Valid {username} aggregate metrics", 
-                        True, 
-                        f"Retrieved {len(data)} records"
-                    )
+                    is_valid, msg = self.validate_dashboard_response(data)
+                    
+                    if is_valid:
+                        total_requests = data['system_overview']['total_requests']
+                        time_series_count = len(data['time_series'])
+                        self.log_test(
+                            f"Valid {username} aggregate metrics", 
+                            True, 
+                            f"Retrieved dashboard data: {total_requests} requests, {time_series_count} time buckets"
+                        )
+                    else:
+                        self.log_test(
+                            f"Valid {username} aggregate metrics", 
+                            False, 
+                            f"Invalid response structure: {msg}"
+                        )
                 else:
                     self.log_test(
                         f"Valid {username} aggregate metrics", 
@@ -135,12 +201,12 @@ class TestMetricsEndpoints:
         
         # Test different filter combinations
         filter_tests = [
-            {"service": "auth-service", "limit": 5},
-            {"method": "GET", "limit": 5},
-            {"endpoint": "/api/v1/login", "limit": 5},
-            {"consumer": "web-app", "limit": 5},
-            {"interval": "1hour", "limit": 5},
-            {"service": "auth-service", "method": "POST", "limit": 5},
+            {"service": "auth-service"},
+            {"method": "GET"},
+            {"endpoint": "/api/v1/login"},
+            {"consumer": "web-app"},
+            {"interval": "1hour"},
+            {"service": "auth-service", "method": "POST"},
         ]
 
         for i, filters in enumerate(filter_tests):
@@ -149,11 +215,21 @@ class TestMetricsEndpoints:
 
                 if response.status_code == 200:
                     data = response.json()
-                    self.log_test(
-                        f"Metrics filters aggregate {i+1}",
-                        True,
-                        f"Retrieved {len(data)} records with filters"
-                    )
+                    is_valid, msg = self.validate_dashboard_response(data)
+                    
+                    if is_valid:
+                        total_requests = data['system_overview']['total_requests']
+                        self.log_test(
+                            f"Metrics filters aggregate {i+1}",
+                            True,
+                            f"Retrieved dashboard with filters: {total_requests} requests"
+                        )
+                    else:
+                        self.log_test(
+                            f"Metrics filters aggregate {i+1}",
+                            False,
+                            f"Invalid response structure: {msg}"
+                        )
                 else:
                     self.log_test(
                         f"Metrics filters aggregate {i+1}",
@@ -179,9 +255,9 @@ class TestMetricsEndpoints:
         one_day_ago = now - timedelta(days=1)
         
         time_tests = [
-            {"start_time": one_hour_ago.isoformat(), "limit": 5},
-            {"end_time": now.isoformat(), "limit": 5},
-            {"start_time": one_day_ago.isoformat(), "end_time": now.isoformat(), "limit": 5},
+            {"start_time": one_hour_ago.isoformat()},
+            {"end_time": now.isoformat()},
+            {"start_time": one_day_ago.isoformat(), "end_time": now.isoformat()},
         ]
 
         for i, time_filters in enumerate(time_tests):
@@ -190,11 +266,21 @@ class TestMetricsEndpoints:
 
                 if response.status_code == 200:
                     data = response.json()
-                    self.log_test(
-                        f"Time range aggregate {i+1}",
-                        True,
-                        f"Retrieved {len(data)} records with time filters"
-                    )
+                    is_valid, msg = self.validate_dashboard_response(data)
+                    
+                    if is_valid:
+                        time_buckets = len(data['time_series'])
+                        self.log_test(
+                            f"Time range aggregate {i+1}",
+                            True,
+                            f"Retrieved {time_buckets} time buckets with time filters"
+                        )
+                    else:
+                        self.log_test(
+                            f"Time range aggregate {i+1}",
+                            False,
+                            f"Invalid response structure: {msg}"
+                        )
                 else:
                     self.log_test(
                         f"Time range aggregate {i+1}",
@@ -215,29 +301,25 @@ class TestMetricsEndpoints:
         
         # Test invalid parameters
         invalid_params = [
-            {"limit": -1},  # Negative limit
-            {"limit": 0},   # Zero limit
             {"interval": "invalid"},  # Invalid interval
-            {"limit": "not_a_number"},  # Non-numeric limit
         ]
 
         for i, params in enumerate(invalid_params):
             try:
                 response = self.session.get(METRICS_AGGREGATE_ENDPOINT, headers=headers, params=params)
 
-                # Some invalid parameters might be handled gracefully (e.g., default values)
-                # So we accept both 200 (with defaults) and 422 (validation error)
-                if response.status_code in [200, 422]:
+                # Invalid interval should return 422
+                if response.status_code == 422:
                     self.log_test(
                         f"Invalid params aggregate {i+1}",
                         True,
-                        f"Handled gracefully (status {response.status_code})"
+                        f"Correctly rejected invalid parameters with 422 status"
                     )
                 else:
                     self.log_test(
                         f"Invalid params aggregate {i+1}",
                         False,
-                        f"Unexpected status {response.status_code}: {response.text}"
+                        f"Expected 422, got {response.status_code}: {response.text}"
                     )
 
             except Exception as e:
@@ -253,15 +335,26 @@ class TestMetricsEndpoints:
         
         # Test basic realtime request
         try:
-            response = self.session.get(METRICS_REALTIME_ENDPOINT, headers=headers, params={"limit": 10})
+            response = self.session.get(METRICS_REALTIME_ENDPOINT, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
-                self.log_test(
-                    "Realtime endpoint basic", 
-                    True, 
-                    f"Retrieved {len(data)} realtime records"
-                )
+                is_valid, msg = self.validate_dashboard_response(data)
+                
+                if is_valid:
+                    time_buckets = len(data['time_series'])
+                    total_requests = data['system_overview']['total_requests']
+                    self.log_test(
+                        "Realtime endpoint basic", 
+                        True, 
+                        f"Retrieved realtime dashboard: {total_requests} requests, {time_buckets} 1-min buckets"
+                    )
+                else:
+                    self.log_test(
+                        "Realtime endpoint basic", 
+                        False, 
+                        f"Invalid response structure: {msg}"
+                    )
             else:
                 self.log_test(
                     "Realtime endpoint basic", 
@@ -279,8 +372,7 @@ class TestMetricsEndpoints:
         
         params = {
             "start_time": thirty_minutes_ago.isoformat(),
-            "end_time": now.isoformat(),
-            "limit": 20
+            "end_time": now.isoformat()
         }
         
         try:
@@ -288,11 +380,21 @@ class TestMetricsEndpoints:
             
             if response.status_code == 200:
                 data = response.json()
-                self.log_test(
-                    "Realtime endpoint with time range", 
-                    True, 
-                    f"Retrieved {len(data)} records for 30-minute window"
-                )
+                is_valid, msg = self.validate_dashboard_response(data)
+                
+                if is_valid:
+                    time_buckets = len(data['time_series'])
+                    self.log_test(
+                        "Realtime endpoint with time range", 
+                        True, 
+                        f"Retrieved {time_buckets} buckets for 30-minute window"
+                    )
+                else:
+                    self.log_test(
+                        "Realtime endpoint with time range", 
+                        False, 
+                        f"Invalid response structure: {msg}"
+                    )
             else:
                 self.log_test(
                     "Realtime endpoint with time range", 
@@ -305,8 +407,7 @@ class TestMetricsEndpoints:
         
         # Test realtime endpoint with filters
         filter_params = {
-            "service": "auth-service",
-            "limit": 15
+            "service": "auth-service"
         }
         
         try:
@@ -314,11 +415,21 @@ class TestMetricsEndpoints:
             
             if response.status_code == 200:
                 data = response.json()
-                self.log_test(
-                    "Realtime endpoint with service filter", 
-                    True, 
-                    f"Retrieved {len(data)} filtered realtime records"
-                )
+                is_valid, msg = self.validate_dashboard_response(data)
+                
+                if is_valid:
+                    total_requests = data['system_overview']['total_requests']
+                    self.log_test(
+                        "Realtime endpoint with service filter", 
+                        True, 
+                        f"Retrieved filtered realtime: {total_requests} requests"
+                    )
+                else:
+                    self.log_test(
+                        "Realtime endpoint with service filter", 
+                        False, 
+                        f"Invalid response structure: {msg}"
+                    )
             else:
                 self.log_test(
                     "Realtime endpoint with service filter", 
@@ -344,8 +455,7 @@ class TestMetricsEndpoints:
         
         params = {
             "start_time": ninety_minutes_ago.isoformat(),
-            "end_time": now.isoformat(),
-            "limit": 10
+            "end_time": now.isoformat()
         }
         
         try:
@@ -372,8 +482,7 @@ class TestMetricsEndpoints:
         
         params = {
             "start_time": sixty_minutes_ago.isoformat(),
-            "end_time": now.isoformat(),
-            "limit": 10
+            "end_time": now.isoformat()
         }
         
         try:
@@ -381,11 +490,21 @@ class TestMetricsEndpoints:
             
             if response.status_code == 200:
                 data = response.json()
-                self.log_test(
-                    "Realtime endpoint valid 60min range", 
-                    True, 
-                    f"Accepted 60-minute range, retrieved {len(data)} records"
-                )
+                is_valid, msg = self.validate_dashboard_response(data)
+                
+                if is_valid:
+                    time_buckets = len(data['time_series'])
+                    self.log_test(
+                        "Realtime endpoint valid 60min range", 
+                        True, 
+                        f"Accepted 60-minute range, retrieved {time_buckets} buckets"
+                    )
+                else:
+                    self.log_test(
+                        "Realtime endpoint valid 60min range", 
+                        False, 
+                        f"Invalid response structure: {msg}"
+                    )
             else:
                 self.log_test(
                     "Realtime endpoint valid 60min range", 

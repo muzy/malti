@@ -23,145 +23,51 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
   const theme = useTheme();
   const [isLeftLogScale, setIsLeftLogScale] = useState(false);
   const [isRightLogScale, setIsRightLogScale] = useState(false);
+
   const prepareTimeSeriesData = () => {
-    if (!data || data.length === 0) return [];
+    if (!Array.isArray(data) || data.length === 0) return [];
 
-    // Group by bucket and aggregate
-    const bucketMap = new Map();
-
-    data.forEach(item => {
-      const bucket = item.bucket;
-      if (!bucketMap.has(bucket)) {
-        bucketMap.set(bucket, {
-          time: new Date(bucket).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          timestamp: new Date(bucket),
-          avgLatency: 0,
-          minLatency: Infinity,
-          maxLatency: 0,
-          totalRequests: 0,
-          weightedLatency: 0,
-        });
-      }
-
-      const current = bucketMap.get(bucket);
-      current.totalRequests += item.count_requests;
-      current.weightedLatency += item.avg_response_time * item.count_requests;
-      current.minLatency = Math.min(current.minLatency, item.min_response_time);
-      current.maxLatency = Math.max(current.maxLatency, item.max_response_time);
-    });
-
-    // Find timestamps from existing data
-    const timestamps = Array.from(bucketMap.values()).map(b => b.timestamp);
-    if (timestamps.length === 0 && !timeRange) return [];
-
-    // Determine bucket interval based on time range (matches backend logic)
-    let bucketInterval;
-    if (timeRange) {
-      if (timeRange.hours === 1) {
-        // Real-time endpoint: 1 minute buckets
-        bucketInterval = 1 * 60 * 1000;
-      } else if (timeRange.hours <= 24) {
-        // 6 hours and 24 hours: 5 minute buckets
-        bucketInterval = 5 * 60 * 1000;
+    return data.map(item => {
+      const timestamp = new Date(item.bucket);
+      
+      // Format time based on time range
+      let timeFormat;
+      if (timeRange && timeRange.hours === 1) {
+        timeFormat = { hour: '2-digit', minute: '2-digit' };
+      } else if (timeRange && timeRange.hours <= 24) {
+        timeFormat = { hour: '2-digit', minute: '2-digit' };
       } else {
-        // 7 days and longer: 1 hour buckets
-        bucketInterval = 60 * 60 * 1000;
+        timeFormat = { month: 'short', day: 'numeric', hour: '2-digit' };
       }
-    } else {
-      // Fallback: detect from data if no timeRange provided
-      const sortedTimestamps = timestamps.sort((a, b) => a - b);
-      bucketInterval = 5 * 60 * 1000; // Default to 5 minutes
 
-      if (sortedTimestamps.length > 1) {
-        // Calculate intervals between consecutive buckets
-        const intervals = [];
-        for (let i = 1; i < sortedTimestamps.length; i++) {
-          intervals.push(sortedTimestamps[i] - sortedTimestamps[i - 1]);
-        }
+      // Use null for missing data to create gaps in the chart
+      const hasData = item.total_requests > 0;
+      
+      const avgLatency = (hasData && item.avg_latency != null && item.avg_latency > 0) 
+        ? item.avg_latency 
+        : null;
+      
+      const minLatency = (hasData && item.min_latency != null && item.min_latency > 0) 
+        ? item.min_latency 
+        : null;
+      
+      const p95Latency = (hasData && item.p95_latency != null && item.p95_latency > 0) 
+        ? item.p95_latency 
+        : null;
+      
+      const totalRequests = (item.total_requests > 0) 
+        ? item.total_requests 
+        : null;
 
-        if (intervals.length > 0) {
-          // Use the most common interval
-          const intervalCounts = {};
-          intervals.forEach(interval => {
-            intervalCounts[interval] = (intervalCounts[interval] || 0) + 1;
-          });
-
-          const mostCommonInterval = Object.keys(intervalCounts).reduce((a, b) =>
-            intervalCounts[a] > intervalCounts[b] ? a : b
-          );
-
-          bucketInterval = parseInt(mostCommonInterval);
-        }
-      }
-    }
-
-    // Determine the time range to display
-    const now = new Date();
-    const requestedEndTime = now.getTime();
-    const requestedStartTime = timeRange
-      ? now.getTime() - (timeRange.hours * 60 * 60 * 1000)
-      : (timestamps.length > 0 ? Math.min(...timestamps) : requestedEndTime);
-
-    // Align start time to bucket boundary
-    const alignedStartTime = Math.floor(requestedStartTime / bucketInterval) * bucketInterval;
-
-    const minTime = alignedStartTime;
-    const maxTime = requestedEndTime;
-
-    // Fill in missing buckets - use timestamp-based approach to avoid duplicates
-    const filledBuckets = new Map();
-
-    // Create a set of existing bucket timestamps for quick lookup
-    const existingTimestamps = new Set();
-    bucketMap.forEach((value, key) => {
-      existingTimestamps.add(value.timestamp.getTime());
-      filledBuckets.set(key, value); // Keep original backend data
+      return {
+        time: timestamp.toLocaleTimeString('en-US', timeFormat),
+        timestamp: timestamp,
+        avgLatency: avgLatency,
+        minLatency: minLatency,
+        p95Latency: p95Latency,
+        totalRequests: totalRequests,
+      };
     });
-
-    // Add missing buckets
-    for (let time = minTime; time <= maxTime; time += bucketInterval) {
-      if (!existingTimestamps.has(time)) {
-        const bucketKey = new Date(time).toISOString();
-        filledBuckets.set(bucketKey, {
-          time: new Date(time).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          timestamp: new Date(time),
-          avgLatency: 0,
-          minLatency: 0,
-          maxLatency: 0,
-          totalRequests: 0,
-          weightedLatency: 0,
-        });
-      }
-    }
-
-    // Calculate weighted averages and sort by time
-    return Array.from(filledBuckets.values())
-      .map(bucket => {
-        const avgLatency = bucket.totalRequests > 0 ? bucket.weightedLatency / bucket.totalRequests : 0;
-        const minLatency = bucket.minLatency === Infinity ? 0 : bucket.minLatency;
-        const maxLatency = bucket.maxLatency;
-
-        // Ensure minimum values for log scale compatibility
-        const adjustedAvgLatency = avgLatency <= 0 ? 0.1 : avgLatency;
-        const adjustedMinLatency = minLatency <= 0 ? 0.1 : minLatency;
-        const adjustedMaxLatency = maxLatency <= 0 ? 0.1 : maxLatency;
-        const adjustedTotalRequests = bucket.totalRequests <= 0 ? 1 : bucket.totalRequests;
-
-        return {
-          ...bucket,
-          avgLatency: adjustedAvgLatency,
-          minLatency: adjustedMinLatency,
-          maxLatency: adjustedMaxLatency,
-          totalRequests: adjustedTotalRequests,
-        };
-      })
-      .sort((a, b) => a.timestamp - b.timestamp);
   };
 
   const timeSeriesData = prepareTimeSeriesData();
@@ -178,7 +84,7 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
             let textColor = theme.palette.text.primary;
             if (entry.name === 'Average Latency') textColor = theme.palette.warning.main;
             else if (entry.name === 'Minimum Latency') textColor = theme.palette.success.main;
-            else if (entry.name === 'Maximum Latency') textColor = theme.palette.error.light;
+            else if (entry.name === 'P95 Latency') textColor = theme.palette.error.main;
             else if (entry.name === 'Total Requests') textColor = theme.palette.primary.main;
 
             return (
@@ -255,7 +161,7 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
             <YAxis
               yAxisId="left"
               scale={isLeftLogScale ? "log" : "linear"}
-              domain={isLeftLogScale ? [0.1, 'dataMax'] : ['dataMin', 'dataMax']}
+              domain={isLeftLogScale ? [0.1, (dataMax) => Math.ceil(dataMax * 1.05)] : [0, (dataMax) => Math.ceil(dataMax * 1.05)]}
               tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
               axisLine={{ stroke: theme.palette.divider }}
               label={{
@@ -269,7 +175,7 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
               yAxisId="right"
               orientation="right"
               scale={isRightLogScale ? "log" : "linear"}
-              domain={isRightLogScale ? [1, 'dataMax'] : ['dataMin', 'dataMax']}
+              domain={isRightLogScale ? [1, (dataMax) => Math.ceil(dataMax * 1.05)] : [0, (dataMax) => Math.ceil(dataMax * 1.05)]}
               tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
               axisLine={{ stroke: theme.palette.divider }}
               label={{
@@ -299,20 +205,22 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
               stroke={theme.palette.success.main}
               strokeWidth={3}
               dot={false}
+              connectNulls={false}
               activeDot={{ r: 8, fill: theme.palette.success.light }}
               name="Minimum Latency"
             />
 
-            {/* Max line */}
+            {/* P95 line (replaces Max) */}
             <Line
               yAxisId="left"
               type="monotone"
-              dataKey="maxLatency"
+              dataKey="p95Latency"
               stroke={theme.palette.error.main}
               strokeWidth={3}
               dot={false}
+              connectNulls={false}
               activeDot={{ r: 8, fill: theme.palette.error.light }}
-              name="Maximum Latency"
+              name="P95 Latency"
             />
 
             {/* Average line */}
@@ -323,6 +231,7 @@ const LatencyChart = ({ data, height = 350, timeRange }) => {
               stroke={theme.palette.warning.main}
               strokeWidth={4}
               dot={{ r: 3, fill: theme.palette.warning.main }}
+              connectNulls={false}
               activeDot={{ r: 8, fill: theme.palette.warning.light }}
               name="Average Latency"
             />

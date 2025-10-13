@@ -13,6 +13,7 @@ import {
   Functions,
   HourglassBottom,
   HourglassFull,
+  TrendingUp,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -122,165 +123,36 @@ const MetricCard = ({ title, value, icon, color = 'primary', chartData, chartTyp
   );
 };
 
-const MetricsCards = ({ data, timeRange }) => {
-  const calculateMetrics = () => {
-    if (data.length === 0) {
+const MetricsCards = ({ data, timeSeries }) => {
+  // Prepare chart data from time series
+  const prepareChartData = () => {
+    if (!Array.isArray(timeSeries) || timeSeries.length === 0) {
       return {
-        minLatency: 0,
-        maxLatency: 0,
-        avgLatency: 0,
-        totalRequests: 0,
+        requestsChart: [],
+        avgLatencyChart: [],
+        minLatencyChart: [],
+        p95LatencyChart: [],
+        maxLatencyChart: [],
       };
     }
-    
-    const latencies = data.flatMap(item => [item.min_response_time, item.max_response_time]);
-    const totalRequests = data.reduce((sum, item) => sum + item.count_requests, 0);
-    const totalLatency = data.reduce((sum, item) => sum + (item.avg_response_time * item.count_requests), 0);
-    
+
     return {
-      minLatency: Math.min(...latencies),
-      maxLatency: Math.max(...latencies),
-      avgLatency: totalRequests > 0 ? totalLatency / totalRequests : 0,
-      totalRequests,
+      requestsChart: timeSeries.map(d => ({ value: d.total_requests || 0 })),
+      avgLatencyChart: timeSeries.map(d => ({ value: d.avg_latency || 0 })),
+      minLatencyChart: timeSeries.map(d => ({ value: d.min_latency || 0 })),
+      p95LatencyChart: timeSeries.map(d => ({ value: d.p95_latency || 0 })),
+      maxLatencyChart: timeSeries.map(d => ({ value: d.max_latency || 0 })),
     };
   };
 
-  const prepareChartData = () => {
-    if (!data || data.length === 0) return {};
-
-    // Group data by time bucket and sort chronologically
-    const bucketMap = new Map();
-
-    data.forEach(item => {
-      const bucket = item.bucket;
-      if (!bucketMap.has(bucket)) {
-        bucketMap.set(bucket, {
-          timestamp: new Date(bucket),
-          requests: 0,
-          totalLatency: 0,
-          minLatency: Infinity,
-          maxLatency: 0,
-          weightedLatency: 0,
-        });
-      }
-
-      const current = bucketMap.get(bucket);
-      current.requests += item.count_requests;
-      current.weightedLatency += item.avg_response_time * item.count_requests;
-      current.minLatency = Math.min(current.minLatency, item.min_response_time);
-      current.maxLatency = Math.max(current.maxLatency, item.max_response_time);
-    });
-
-    // Find timestamps from existing data
-    const timestamps = Array.from(bucketMap.values()).map(b => b.timestamp);
-    if (timestamps.length === 0 && !timeRange) return {};
-
-    // Determine bucket interval based on time range (matches backend logic)
-    let bucketInterval;
-    if (timeRange) {
-      if (timeRange.hours === 1) {
-        // Real-time endpoint: 1 minute buckets
-        bucketInterval = 1 * 60 * 1000;
-      } else if (timeRange.hours <= 24) {
-        // 6 hours and 24 hours: 5 minute buckets
-        bucketInterval = 5 * 60 * 1000;
-      } else {
-        // 7 days and longer: 1 hour buckets
-        bucketInterval = 60 * 60 * 1000;
-      }
-    } else {
-      // Fallback: detect from data if no timeRange provided
-      const sortedTimestamps = timestamps.sort((a, b) => a - b);
-      bucketInterval = 5 * 60 * 1000; // Default to 5 minutes
-
-      if (sortedTimestamps.length > 1) {
-        // Calculate intervals between consecutive buckets
-        const intervals = [];
-        for (let i = 1; i < sortedTimestamps.length; i++) {
-          intervals.push(sortedTimestamps[i] - sortedTimestamps[i - 1]);
-        }
-
-        if (intervals.length > 0) {
-          // Use the most common interval
-          const intervalCounts = {};
-          intervals.forEach(interval => {
-            intervalCounts[interval] = (intervalCounts[interval] || 0) + 1;
-          });
-
-          const mostCommonInterval = Object.keys(intervalCounts).reduce((a, b) =>
-            intervalCounts[a] > intervalCounts[b] ? a : b
-          );
-
-          bucketInterval = parseInt(mostCommonInterval);
-        }
-      }
-    }
-
-    // Determine the time range to display
-    const now = new Date();
-    const requestedEndTime = now.getTime();
-    const requestedStartTime = timeRange
-      ? now.getTime() - (timeRange.hours * 60 * 60 * 1000)
-      : (timestamps.length > 0 ? Math.min(...timestamps) : requestedEndTime);
-
-    // Align start time to bucket boundary
-    const alignedStartTime = Math.floor(requestedStartTime / bucketInterval) * bucketInterval;
-
-    const minTime = alignedStartTime;
-    const maxTime = requestedEndTime;
-
-    // Fill in missing buckets - use timestamp-based approach to avoid duplicates
-    const filledBuckets = new Map();
-
-    // Create a set of existing bucket timestamps for quick lookup
-    const existingTimestamps = new Set();
-    bucketMap.forEach((value, key) => {
-      existingTimestamps.add(value.timestamp.getTime());
-      filledBuckets.set(key, value); // Keep original backend data
-    });
-
-    // Add missing buckets
-    for (let time = minTime; time <= maxTime; time += bucketInterval) {
-      if (!existingTimestamps.has(time)) {
-        const bucketKey = new Date(time).toISOString();
-        filledBuckets.set(bucketKey, {
-          timestamp: new Date(time),
-          requests: 0,
-          totalLatency: 0,
-          minLatency: 0,
-          maxLatency: 0,
-          weightedLatency: 0,
-        });
-      }
-    }
-
-    const sortedData = Array.from(filledBuckets.values())
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .map((bucket, index) => ({
-        x: index,
-        requests: bucket.requests,
-        avgLatency: bucket.requests > 0 ? bucket.weightedLatency / bucket.requests : 0,
-        minLatency: bucket.minLatency === Infinity ? 0 : bucket.minLatency,
-        maxLatency: bucket.maxLatency,
-      }));
-
-    return {
-      requestsChart: sortedData.map(d => ({ value: d.requests })),
-      avgLatencyChart: sortedData.map(d => ({ value: d.avgLatency })),
-      minLatencyChart: sortedData.map(d => ({ value: d.minLatency })),
-      maxLatencyChart: sortedData.map(d => ({ value: d.maxLatency })),
-    };
-  };
-
-  const metrics = calculateMetrics();
   const chartData = prepareChartData();
 
   return (
     <Grid container spacing={3} sx={{ width: '100%' }}>
-      <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', flexGrow: 1  }}>
+      <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex', flexGrow: 1  }}>
           <MetricCard
             title="Total Requests"
-            value={metrics.totalRequests.toLocaleString()}
+            value={data.total_requests.toLocaleString()}
             icon={Functions}
             color="primary"
             chartData={chartData.requestsChart}
@@ -288,10 +160,10 @@ const MetricsCards = ({ data, timeRange }) => {
           />
       </Grid>
 
-      <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', flexGrow: 1 }}>
+      <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex', flexGrow: 1 }}>
           <MetricCard
             title="Average Latency"
-            value={`${metrics.avgLatency.toFixed(1)}ms`}
+            value={data.avg_latency !== null ? `${data.avg_latency.toFixed(1)}ms` : 'N/A'}
             icon={Speed}
             color="warning"
             chartData={chartData.avgLatencyChart}
@@ -299,10 +171,21 @@ const MetricsCards = ({ data, timeRange }) => {
           />
       </Grid>
 
-      <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', flexGrow: 1 }}>
+      <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex', flexGrow: 1 }}>
+          <MetricCard
+            title="P95 Latency"
+            value={data.p95_latency !== null ? `${data.p95_latency.toFixed(1)}ms` : 'N/A'}
+            icon={TrendingUp}
+            color="info"
+            chartData={chartData.p95LatencyChart}
+            chartType="line"
+          />
+      </Grid>
+
+      <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex', flexGrow: 1 }}>
           <MetricCard
             title="Min Latency"
-            value={`${metrics.minLatency.toFixed(1)}ms`}
+            value={data.min_latency !== null ? `${data.min_latency.toFixed(1)}ms` : 'N/A'}
             icon={HourglassBottom}
             color="success"
             chartData={chartData.minLatencyChart}
@@ -310,10 +193,10 @@ const MetricsCards = ({ data, timeRange }) => {
           />
       </Grid>
 
-      <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', flexGrow: 1 }}>
+      <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex', flexGrow: 1 }}>
           <MetricCard
             title="Max Latency"
-            value={`${metrics.maxLatency.toFixed(1)}ms`}
+            value={data.max_latency !== null ? `${data.max_latency.toFixed(1)}ms` : 'N/A'}
             icon={HourglassFull}
             color="error"
             chartData={chartData.maxLatencyChart}

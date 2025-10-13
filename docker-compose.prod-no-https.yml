@@ -1,0 +1,48 @@
+name: malti
+services:
+
+  # TimescaleDB database
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    container_name: timescaledb
+    environment:
+      POSTGRES_DB: malti
+      POSTGRES_USER: ${DB_USER:-malti_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-malti_password}
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-malti_user} -d malti"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - malti-network
+
+  # Malti backend API
+  malti:
+    image: muzy/malti:latest
+    container_name: backend
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-malti_user}:${DB_PASSWORD:-malti_password}@timescaledb:5432/malti
+      MALTI_CONFIG_PATH: /app/config/malti.toml
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./config:/app/config
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - malti-network
+    ports:
+      - "8000:8000"
+
+volumes:
+  timescaledb_data:
+
+networks:
+  malti-network:
+    driver: bridge

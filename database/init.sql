@@ -66,8 +66,8 @@ FROM requests
 GROUP BY service, node, method, endpoint, consumer, context, status, bucket;
 
 -- Set up data retention policies
--- Raw data: 6 hours
-SELECT add_retention_policy('requests', INTERVAL '6 hours');
+-- Raw data: 7 days
+SELECT add_retention_policy('requests', INTERVAL '7 days');
 
 -- 5-minute aggregates: 90 days
 SELECT add_retention_policy('requests_5min', INTERVAL '90 days');

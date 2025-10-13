@@ -5,7 +5,6 @@ import {
   Box,
   List,
   ListItem,
-  ListItemText,
   Chip,
   LinearProgress,
   alpha,
@@ -14,36 +13,8 @@ import {
 
 const EndpointsChart = ({ data, onEndpointClick }) => {
   const theme = useTheme();
-  const prepareEndpointData = () => {
-    if (!data || data.length === 0) return [];
-    
-    const endpointMap = new Map();
-    
-    data.forEach(item => {
-      const key = `${item.method} ${item.endpoint}`;
-      if (!endpointMap.has(key)) {
-        endpointMap.set(key, {
-          endpoint: item.endpoint,
-          method: item.method,
-          fullEndpoint: key,
-          count: 0,
-          errors: 0,
-        });
-      }
-      
-      const current = endpointMap.get(key);
-      current.count += item.count_requests;
-      if (item.status >= 400 && item.status !== 401) {
-        current.errors += item.count_requests;
-      }
-    });
-    
-    return Array.from(endpointMap.values())
-      .sort((a, b) => b.count - a.count);
-  };
 
-  const endpointData = prepareEndpointData();
-  const maxCount = endpointData.length > 0 ? Math.max(...endpointData.map(item => item.count)) : 1;
+  const maxCount = Array.isArray(data) && data.length > 0 ? Math.max(...data.map(item => item.total_requests)) : 1;
 
   const getMethodColor = (method) => {
     const colors = {
@@ -72,7 +43,7 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
         Top Endpoints by Request Count
       </Typography>
       
-      {endpointData.length === 0 ? (
+      {!Array.isArray(data) || data.length === 0 ? (
         <Box sx={{ 
           display: 'flex', 
           alignItems: 'center', 
@@ -85,7 +56,7 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
       ) : (
         <Box sx={{ mt: 2 }}>
           <List sx={{ p: 0 }}>
-            {endpointData.map((item, index) => (
+            {data.map((item, index) => (
               <ListItem
                 key={index}
                 onClick={() => onEndpointClick?.(item.endpoint, item.method)}
@@ -133,7 +104,7 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                       <Typography variant="body2" fontWeight={600}>
-                        {item.count.toLocaleString()}
+                        {item.total_requests.toLocaleString()}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         requests
@@ -145,7 +116,7 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
                   <Box sx={{ mb: 1 }}>
                     <LinearProgress
                       variant="determinate"
-                      value={(item.count / maxCount) * 100}
+                      value={(item.total_requests / maxCount) * 100}
                       sx={{
                         height: 8,
                         borderRadius: 4,
@@ -159,12 +130,12 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
                   </Box>
                   
                   {/* Error rate indicator */}
-                  {item.errors > 0 && (
+                  {item.error_count > 0 && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box sx={{ flex: 1 }}>
                         <LinearProgress
                           variant="determinate"
-                          value={(item.errors / item.count) * 100}
+                          value={item.error_rate}
                           color="error"
                           sx={{
                             height: 4,
@@ -177,7 +148,7 @@ const EndpointsChart = ({ data, onEndpointClick }) => {
                         />
                       </Box>
                       <Typography variant="caption" color="error.main" sx={{ minWidth: 'fit-content' }}>
-                        {item.errors} errors ({((item.errors / item.count) * 100).toFixed(1)}%)
+                        {item.error_count} errors ({item.error_rate.toFixed(1)}%)
                       </Typography>
                     </Box>
                   )}

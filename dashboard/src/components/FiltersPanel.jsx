@@ -43,33 +43,18 @@ const FiltersPanel = ({
   services,
   endpoints,
   methods,
-  endpointContexts,
   data,
 }) => {
   const getFilteredNodes = () => {
-    if (!selectedService) return [];
-    return [...new Set(
-      data
-        .filter(item => item.service === selectedService)
-        .map(item => item.node)
-        .filter(Boolean)
-    )];
+    if (!data || !Array.isArray(data.distinct_nodes)) return [];
+    // Return all distinct nodes from the API (already unique)
+    return data.distinct_nodes;
   };
 
   const getFilteredContexts = () => {
-    if (!selectedEndpoint) return [];
-
-    // If we have endpoint-context mapping from unfiltered data, use it
-    if (endpointContexts && endpointContexts[selectedEndpoint]) {
-      return endpointContexts[selectedEndpoint];
-    }
-
-    // Fallback to filtering current data
-    return [...new Set(
-      data
-        .filter(item => item.endpoint === selectedEndpoint && item.context)
-        .map(item => item.context)
-    )].sort();
+    if (!data || !Array.isArray(data.distinct_contexts)) return [];
+    // Return all distinct contexts from the API (already unique and sorted)
+    return data.distinct_contexts;
   };
 
   const activeFiltersCount = [selectedService, selectedNode, selectedEndpoint, selectedMethod, selectedContext].filter(Boolean).length;
@@ -130,10 +115,7 @@ const FiltersPanel = ({
           </Typography>
           <Select
             value={selectedService}
-            onChange={(e) => {
-              setSelectedService(e.target.value);
-              setSelectedNode(''); // Reset node when service changes
-            }}
+            onChange={(e) => setSelectedService(e.target.value)}
             displayEmpty
             size="small"
             sx={{ width: 180, minWidth: 180 }}
@@ -161,7 +143,6 @@ const FiltersPanel = ({
           <Select
             value={selectedNode}
             onChange={(e) => setSelectedNode(e.target.value)}
-            disabled={!selectedService}
             displayEmpty
             size="small"
             sx={{ width: 180, minWidth: 180 }}
@@ -191,11 +172,10 @@ const FiltersPanel = ({
             onChange={(e) => {
               const selectedEndpointValue = e.target.value;
               setSelectedEndpoint(selectedEndpointValue);
-              setSelectedContext(''); // Reset context when endpoint changes
 
               // Find the service that corresponds to this endpoint
-              if (selectedEndpointValue) {
-                const endpointData = data.find(item => item.endpoint === selectedEndpointValue);
+              if (selectedEndpointValue && data && Array.isArray(data.endpoints)) {
+                const endpointData = data.endpoints.find(item => item.endpoint === selectedEndpointValue);
                 if (endpointData && endpointData.service) {
                   setSelectedService(endpointData.service);
                 }
@@ -276,8 +256,8 @@ const FiltersPanel = ({
           </Select>
         </Box>
 
-        {/* Context Selector - Only show when endpoint is selected and there are contexts available */}
-        {selectedEndpoint && getFilteredContexts().length > 0 && (
+        {/* Context Selector - Show when there are contexts available */}
+        {getFilteredContexts().length > 0 && (
           <Box>
             <Typography variant="subtitle2" gutterBottom sx={{ color: 'text.secondary', mb: 1 }}>
               Context

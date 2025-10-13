@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 import nh3
 
@@ -89,3 +89,63 @@ class RawMetrics(BaseModel):
     created_at: datetime
     status: int
     response_time: int
+
+class TimeSeriesDataPoint(BaseModel):
+    """Single time series data point for charting"""
+    bucket: datetime
+    total_requests: int
+    min_latency: Optional[float] = None
+    avg_latency: Optional[float] = None
+    p95_latency: Optional[float] = None
+    max_latency: Optional[float] = None
+
+class MetricsCardsSummary(BaseModel):
+    """Summary metrics for dashboard cards"""
+    total_requests: int
+    avg_latency: Optional[float] = None
+    min_latency: Optional[float] = None
+    p95_latency: Optional[float] = None
+    max_latency: Optional[float] = None
+
+class EndpointAggregation(BaseModel):
+    """Aggregated metrics per endpoint"""
+    endpoint: str
+    method: str
+    service: str
+    total_requests: int
+    error_count: int
+    error_rate: float
+
+class StatusDistribution(BaseModel):
+    """Status code distribution per service"""
+    service: str
+    total_requests: int
+    success_2xx: int
+    warning_3xx: int
+    error_4xx_5xx: int
+    status_breakdown: Dict[int, int]
+
+class ConsumerAggregation(BaseModel):
+    """Aggregated metrics per consumer"""
+    consumer: str
+    total_requests: int
+    error_count: int
+    error_rate: float
+
+class SystemOverview(BaseModel):
+    """System-wide overview metrics"""
+    total_requests: int
+    total_errors: int
+    error_rate: float
+    avg_latency: Optional[float] = None
+
+class DashboardMetricsResponse(BaseModel):
+    """Complete dashboard metrics response"""
+    time_series: List[TimeSeriesDataPoint]
+    metrics_summary: MetricsCardsSummary
+    endpoints: List[EndpointAggregation]
+    status_distribution: List[StatusDistribution]
+    consumers: List[ConsumerAggregation]
+    system_overview: SystemOverview
+    distinct_nodes: List[str] = Field(default_factory=list, description="List of distinct nodes for filtering")
+    distinct_contexts: List[str] = Field(default_factory=list, description="List of distinct contexts for filtering")

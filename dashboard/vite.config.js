@@ -21,9 +21,26 @@ export default defineConfig({
       output: {
         entryFileNames: 'assets/[name].[hash].js',
         chunkFileNames: 'assets/[name].[hash].js',
-        assetFileNames: 'assets/[name].[hash].[ext]'
+        assetFileNames: 'assets/[name].[hash].[ext]',
+        manualChunks: {
+          // Split React core libraries
+          'react-vendor': ['react', 'react-dom'],
+          // Split MUI into its own chunk (large library)
+          'mui-vendor': [
+            '@mui/material',
+            '@mui/icons-material',
+            '@mui/x-tree-view',
+            '@emotion/react',
+            '@emotion/styled'
+          ],
+          // Split Recharts (charting library)
+          'charts-vendor': ['recharts'],
+          // Split state management
+          'state-vendor': ['zustand']
+        }
       }
-    }
+    },
+    chunkSizeWarningLimit: 1000
   },
   base: '/static/'
 })

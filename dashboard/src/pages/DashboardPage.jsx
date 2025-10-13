@@ -33,7 +33,7 @@ const TIME_RANGES = [
 const DashboardPage = () => {
   const { makeAuthenticatedRequest } = useAuth();
   
-  const [data, setData] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState(TIME_RANGES[0]); // Default to 1 hour
@@ -45,7 +45,6 @@ const DashboardPage = () => {
   const [services, setServices] = useState([]);
   const [endpoints, setEndpoints] = useState([]);
   const [methods, setMethods] = useState([]);
-  const [endpointContexts, setEndpointContexts] = useState({}); // Store endpoint-context mapping from unfiltered data
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -66,9 +65,6 @@ const DashboardPage = () => {
       if (selectedMethod) params.append('method', selectedMethod);
       if (selectedContext) params.append('context', selectedContext);
 
-      // Check if this is an unfiltered request (no filters applied)
-      const isUnfilteredRequest = !selectedService && !selectedNode && !selectedEndpoint && !selectedMethod && !selectedContext;
-
       // Use realtime endpoint for "Last hour" selection, regular aggregate for others
       const endpoint = selectedTimeRange.hours === 1
         ? '/api/v1/metrics/aggregate/realtime'
@@ -78,34 +74,24 @@ const DashboardPage = () => {
       
       if (response.ok) {
         const result = await response.json();
-        setData(result || []);
+        setData(result);
         
-        // Extract unique services, endpoints, methods, and contexts
-        const uniqueServices = [...new Set(result.map(item => item.service))].sort();
-        const uniqueEndpoints = [...new Set(result.map(item => item.endpoint))].sort();
-        const uniqueMethods = [...new Set(result.map(item => item.method))].sort();
-
-        setServices(uniqueServices);
-        setEndpoints(uniqueEndpoints);
-        setMethods(uniqueMethods);
-
-        // If this is an unfiltered request, store endpoint-context mapping for later use
-        if (isUnfilteredRequest) {
-          const endpointContextMap = {};
-          result.forEach(item => {
-            if (item.endpoint && item.context) {
-              if (!endpointContextMap[item.endpoint]) {
-                endpointContextMap[item.endpoint] = new Set();
-              }
-              endpointContextMap[item.endpoint].add(item.context);
-            }
-          });
-          // Convert Sets to Arrays for easier use
-          const finalMap = {};
-          Object.keys(endpointContextMap).forEach(endpoint => {
-            finalMap[endpoint] = Array.from(endpointContextMap[endpoint]).sort();
-          });
-          setEndpointContexts(finalMap);
+        // Extract unique services, endpoints, methods from the aggregated data
+        if (Array.isArray(result.endpoints) && result.endpoints.length > 0) {
+          const uniqueEndpoints = [...new Set(result.endpoints.map(item => item.endpoint))].sort();
+          const uniqueMethods = [...new Set(result.endpoints.map(item => item.method))].sort();
+          const uniqueServices = [...new Set(result.endpoints.map(item => item.service))].sort();
+          
+          setEndpoints(uniqueEndpoints);
+          setMethods(uniqueMethods);
+          setServices(uniqueServices);
+        }
+        
+        // Fallback: if no endpoints data, try to get services from status_distribution
+        if (Array.isArray(result.status_distribution) && result.status_distribution.length > 0) {
+          // Only set services if we haven't already set them from endpoints
+          const currentServices = [...new Set(result.status_distribution.map(item => item.service))].sort();
+          setServices(prevServices => prevServices.length === 0 ? currentServices : prevServices);
         }
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -124,15 +110,33 @@ const DashboardPage = () => {
 
   const handleEndpointClick = (endpoint, method) => {
     setSelectedEndpoint(endpoint);
-    setSelectedMethod(method); // Set the method from the clicked endpoint
-    setSelectedContext(''); // Reset context when endpoint changes
+    setSelectedMethod(method);
+    setSelectedContext('');
 
-    // Find the service that corresponds to this endpoint
-    const endpointData = data.find(item => item.endpoint === endpoint);
-    if (endpointData && endpointData.service) {
-      setSelectedService(endpointData.service);
+    // Find the service that corresponds to this endpoint from endpoints data
+    if (data && data.endpoints && data.endpoints.length > 0) {
+      const matchingEndpoint = data.endpoints.find(item => 
+        item.endpoint === endpoint && item.method === method
+      );
+      if (matchingEndpoint) {
+        setSelectedService(matchingEndpoint.service);
+      }
     }
   };
+
+  // Check if time_series has any actual data (not just gap-filled empty buckets)
+  const hasActualTimeSeriesData = data && 
+    Array.isArray(data.time_series) && 
+    data.time_series.length > 0 && 
+    data.time_series.some(item => item.total_requests > 0);
+
+  const hasData = data && (
+    hasActualTimeSeriesData ||
+    (data.system_overview && data.system_overview.total_requests > 0) ||
+    (Array.isArray(data.endpoints) && data.endpoints.length > 0) ||
+    (Array.isArray(data.status_distribution) && data.status_distribution.length > 0) ||
+    (Array.isArray(data.consumers) && data.consumers.length > 0)
+  );
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -172,7 +176,6 @@ const DashboardPage = () => {
               services={services}
               endpoints={endpoints}
               methods={methods}
-              endpointContexts={endpointContexts}
               data={data}
             />
 
@@ -193,40 +196,59 @@ const DashboardPage = () => {
             {/* Content */}
             {!loading && (
               <>
-                {data.length === 0 ? (
+                {!hasData ? (
                   <EmptyState onRefresh={fetchData} />
                 ) : (
                   <>
                     {/* System Overview and Metrics - Same Width */}
-                    <Box sx={{ mb: 4 }}>
-                      <StatusIndicator data={data} />
-                    </Box>
+                    {data.system_overview && data.system_overview.total_requests > 0 && (
+                      <Box sx={{ mb: 4 }}>
+                        <StatusIndicator data={data.system_overview} />
+                      </Box>
+                    )}
                     
-                    <Box sx={{ mb: 4 }}>
-                      <MetricsCards data={data} timeRange={selectedTimeRange} />
-                    </Box>
+                    {data.metrics_summary && data.metrics_summary.total_requests > 0 && (
+                      <Box sx={{ mb: 4 }}>
+                        <MetricsCards 
+                          data={data.metrics_summary} 
+                          timeSeries={data.time_series}
+                        />
+                      </Box>
+                    )}
 
                     {/* Response Time Chart - Full Width, Double Height */}
-                    <Box sx={{ mb: 4 }}>
-                      <LatencyChart data={data} height={700} timeRange={selectedTimeRange} />
-                    </Box>
+                    {Array.isArray(data.time_series) && data.time_series.length > 0 && (
+                      <Box sx={{ mb: 4 }}>
+                        <LatencyChart 
+                          data={data.time_series} 
+                          height={700} 
+                          timeRange={selectedTimeRange} 
+                        />
+                      </Box>
+                    )}
 
                   {/* Charts Layout - 50% Endpoints, 25% Status Distribution, 25% Consumer */}
                   <Grid container spacing={3} alignItems="flex-start" sx={{ width: '100%' }}>
                     {/* Left Column - Endpoints Chart (50% width) */}
-                    <Grid item xs={12} lg={6} sx={{ width: '100%', maxWidth: 'none' }}>
-                      <EndpointsChart data={data} onEndpointClick={handleEndpointClick} />
-                    </Grid>
+                    {Array.isArray(data.endpoints) && data.endpoints.length > 0 && (
+                      <Grid item xs={12} lg={6} sx={{ width: '100%', maxWidth: 'none' }}>
+                        <EndpointsChart data={data.endpoints} onEndpointClick={handleEndpointClick} />
+                      </Grid>
+                    )}
 
                     {/* Middle Column - Status Distribution Chart (25% width) */}
-                    <Grid item xs={12} lg={3} sx={{ width: '100%', maxWidth: 'none' }}>
-                      <ErrorRateChart data={data} />
-                    </Grid>
+                    {Array.isArray(data.status_distribution) && data.status_distribution.length > 0 && (
+                      <Grid item xs={12} lg={3} sx={{ width: '100%', maxWidth: 'none' }}>
+                        <ErrorRateChart data={data.status_distribution} />
+                      </Grid>
+                    )}
 
                     {/* Right Column - Consumer Chart (25% width) */}
-                    <Grid item xs={12} lg={3} sx={{ width: '100%', maxWidth: 'none' }}>
-                      <ConsumerChart data={data} />
-                    </Grid>
+                    {Array.isArray(data.consumers) && data.consumers.length > 0 && (
+                      <Grid item xs={12} lg={3} sx={{ width: '100%', maxWidth: 'none' }}>
+                        <ConsumerChart data={data.consumers} />
+                      </Grid>
+                    )}
                   </Grid>
                   </>
                 )}
