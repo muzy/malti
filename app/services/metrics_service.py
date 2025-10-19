@@ -114,10 +114,18 @@ class MetricsService:
                     SELECT
                         time_bucket_gapfill('{bucket_size}', created_at, :start_time, :end_time) as bucket,
                         COALESCE(COUNT(*), 0) as total_requests,
-                        CASE WHEN COUNT(*) > 0 THEN MIN(response_time)::float ELSE NULL END as min_latency,
-                        CASE WHEN COUNT(*) > 0 THEN AVG(response_time)::float ELSE NULL END as avg_latency,
-                        CASE WHEN COUNT(*) > 0 THEN PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time)::float ELSE NULL END as p95_latency,
-                        CASE WHEN COUNT(*) > 0 THEN MAX(response_time)::float ELSE NULL END as max_latency
+                        CASE WHEN COUNT(*) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN MIN(response_time) FILTER (WHERE status >= 200 AND status < 300)::float 
+                            ELSE NULL END as min_latency,
+                        CASE WHEN COUNT(*) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN AVG(response_time) FILTER (WHERE status >= 200 AND status < 300)::float 
+                            ELSE NULL END as avg_latency,
+                        CASE WHEN COUNT(*) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time) FILTER (WHERE status >= 200 AND status < 300)::float 
+                            ELSE NULL END as p95_latency,
+                        CASE WHEN COUNT(*) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN MAX(response_time) FILTER (WHERE status >= 200 AND status < 300)::float 
+                            ELSE NULL END as max_latency
                     FROM base_data
                     GROUP BY time_bucket_gapfill('{bucket_size}', created_at, :start_time, :end_time)
                     ORDER BY bucket
@@ -125,10 +133,10 @@ class MetricsService:
                 metrics_summary AS (
                     SELECT
                         COUNT(*) as total_requests,
-                        AVG(response_time)::float as avg_latency,
-                        MIN(response_time)::float as min_latency,
-                        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time)::float as p95_latency,
-                        MAX(response_time)::float as max_latency
+                        AVG(response_time) FILTER (WHERE status >= 200 AND status < 300)::float as avg_latency,
+                        MIN(response_time) FILTER (WHERE status >= 200 AND status < 300)::float as min_latency,
+                        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time) FILTER (WHERE status >= 200 AND status < 300)::float as p95_latency,
+                        MAX(response_time) FILTER (WHERE status >= 200 AND status < 300)::float as max_latency
                     FROM base_data
                 ),
                 endpoint_agg AS (
@@ -178,7 +186,7 @@ class MetricsService:
                         COUNT(*) as total_requests,
                         SUM(CASE WHEN status >= 400 AND status != 401 THEN 1 ELSE 0 END) as total_errors,
                         (SUM(CASE WHEN status >= 400 AND status != 401 THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0)::float * 100) as error_rate,
-                        AVG(response_time)::float as avg_latency
+                        AVG(response_time) FILTER (WHERE status >= 200 AND status < 300)::float as avg_latency
                     FROM base_data
                 ),
                 distinct_nodes AS (
@@ -299,14 +307,21 @@ class MetricsService:
                     SELECT
                         time_bucket_gapfill('{bucket_size}', bucket, :start_time, :end_time) as bucket,
                         COALESCE(SUM(count_requests), 0) as total_requests,
-                        CASE WHEN SUM(count_requests) > 0 THEN MIN(min_response_time) FILTER (WHERE min_response_time IS NOT NULL)::float ELSE NULL END as min_latency,
-                        CASE WHEN SUM(count_requests) > 0 THEN 
-                            (SUM(avg_response_time * count_requests) / SUM(count_requests))::float 
+                        CASE WHEN SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN MIN(min_response_time) FILTER (WHERE status >= 200 AND status < 300 AND min_response_time IS NOT NULL)::float 
+                            ELSE NULL END as min_latency,
+                        CASE WHEN SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300) > 0 THEN 
+                            (SUM(avg_response_time * count_requests) FILTER (WHERE status >= 200 AND status < 300) / 
+                             SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300))::float 
                         ELSE NULL END as avg_latency,
                         -- Note: P95 in time series is approximate when aggregating pre-aggregated data
                         -- For accurate overall P95, see metrics_summary which queries raw data
-                        CASE WHEN SUM(count_requests) > 0 THEN MAX(p95_response_time) FILTER (WHERE p95_response_time IS NOT NULL)::float ELSE NULL END as p95_latency,
-                        CASE WHEN SUM(count_requests) > 0 THEN MAX(max_response_time) FILTER (WHERE max_response_time IS NOT NULL)::float ELSE NULL END as max_latency
+                        CASE WHEN SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN MAX(p95_response_time) FILTER (WHERE status >= 200 AND status < 300 AND p95_response_time IS NOT NULL)::float 
+                            ELSE NULL END as p95_latency,
+                        CASE WHEN SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300) > 0 
+                            THEN MAX(max_response_time) FILTER (WHERE status >= 200 AND status < 300 AND max_response_time IS NOT NULL)::float 
+                            ELSE NULL END as max_latency
                     FROM base_data
                     GROUP BY time_bucket_gapfill('{bucket_size}', bucket, :start_time, :end_time)
                     ORDER BY bucket
@@ -314,11 +329,12 @@ class MetricsService:
                 metrics_summary AS (
                     SELECT
                         SUM(count_requests) as total_requests,
-                        (SUM(avg_response_time * count_requests) / SUM(count_requests))::float as avg_latency,
-                        MIN(min_response_time) FILTER (WHERE min_response_time IS NOT NULL)::float as min_latency,
+                        (SUM(avg_response_time * count_requests) FILTER (WHERE status >= 200 AND status < 300) / 
+                         SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300))::float as avg_latency,
+                        MIN(min_response_time) FILTER (WHERE status >= 200 AND status < 300 AND min_response_time IS NOT NULL)::float as min_latency,
                         -- Note: P95 calculation from pre-aggregated data is approximate
-                        MAX(p95_response_time) FILTER (WHERE p95_response_time IS NOT NULL)::float as p95_latency,
-                        MAX(max_response_time) FILTER (WHERE max_response_time IS NOT NULL)::float as max_latency
+                        MAX(p95_response_time) FILTER (WHERE status >= 200 AND status < 300 AND p95_response_time IS NOT NULL)::float as p95_latency,
+                        MAX(max_response_time) FILTER (WHERE status >= 200 AND status < 300 AND max_response_time IS NOT NULL)::float as max_latency
                     FROM base_data
                 ),
                 endpoint_agg AS (
@@ -371,7 +387,8 @@ class MetricsService:
                         SUM(CASE WHEN status >= 400 AND status != 401 THEN count_requests ELSE 0 END) as total_errors,
                         (SUM(CASE WHEN status >= 400 AND status != 401 THEN count_requests ELSE 0 END)::float / 
                          NULLIF(SUM(count_requests), 0)::float * 100) as error_rate,
-                        (SUM(avg_response_time * count_requests) / SUM(count_requests))::float as avg_latency
+                        (SUM(avg_response_time * count_requests) FILTER (WHERE status >= 200 AND status < 300) / 
+                         SUM(count_requests) FILTER (WHERE status >= 200 AND status < 300))::float as avg_latency
                     FROM base_data
                 ),
                 distinct_nodes AS (
